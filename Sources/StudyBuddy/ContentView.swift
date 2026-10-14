@@ -9,6 +9,7 @@ import StudyBuddyCore
 /// interaction is talk, reply, talk.
 struct ContentView: View {
     @State private var tutor = TutorController(voice: SystemVoice())
+    @State private var ears = SpeechRecognizer()
     /// Drives a single warning in the header until the key is added. Hidden once it is set, and
     /// never a modal, because the tutor is otherwise ready to go.
     @State private var hasKey = false
@@ -171,7 +172,28 @@ struct ContentView: View {
 
     private var composer: some View {
         HStack(alignment: .bottom, spacing: 10) {
-            TextField("Say something…", text: $draft, axis: .vertical)
+            Button {
+                ears.toggle()
+            } label: {
+                Image(systemName: ears.state == .listening ? "waveform" : "mic.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(ears.state == .listening ? Theme.background : Theme.goldInk)
+                    .frame(width: 42, height: 42)
+                    .background(Circle().fill(ears.state == .listening ? Theme.gold : Theme.goldPale))
+                    .overlay {
+                        // A ring that grows while listening, so it is obvious the mic is open even
+                        // when the transcript has not started filling yet.
+                        if ears.state == .listening {
+                            Circle()
+                                .stroke(Theme.gold.opacity(0.5), lineWidth: 2)
+                                .scaleEffect(1.18)
+                        }
+                    }
+                    .animation(.easeOut(duration: 0.18), value: ears.state == .listening)
+            }
+            .accessibilityLabel(ears.state == .listening ? "Stop listening" : "Talk to Aurelia")
+
+            TextField("Tap the mic or type…", text: $draft, axis: .vertical)
                 .font(Theme.body())
                 .foregroundStyle(Theme.text)
                 .lineLimit(1 ... 5)

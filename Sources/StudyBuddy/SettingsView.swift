@@ -51,12 +51,20 @@ struct SettingsView: View {
                     .disabled(draftKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                     if !savedKey.isEmpty {
-                        LabeledContent("Saved", value: "••••••••" + String(savedKey.suffix(4)))
+                        LabeledContent("In Keychain", value: "••••••••" + String(savedKey.suffix(4)))
+                        Text("This overrides the built-in key, so you can rotate without a rebuild.")
+                            .font(.footnote)
+                            .foregroundStyle(Theme.textMuted)
                         Button(role: .destructive) { clear() } label: {
-                            Label("Remove key", systemImage: "trash")
+                            Label("Remove from Keychain", systemImage: "trash")
                         }
+                    } else if !InjectedAPIKey.value.isEmpty {
+                        LabeledContent("Key", value: "built into this build")
+                        Text("Baked in by tools/inject-key.sh. Nothing to paste. Run that script with --clear, or add a key above, to change it.")
+                            .font(.footnote)
+                            .foregroundStyle(Theme.textMuted)
                     } else {
-                        Text("No key saved. The tutor cannot reach DeepSeek until you add one.")
+                        Text("No key anywhere. Run bash tools/inject-key.sh and rebuild, or paste one above.")
                             .font(.footnote)
                             .foregroundStyle(Theme.goldInk)
                     }
@@ -88,7 +96,7 @@ struct SettingsView: View {
                             if status == .testing { ProgressView() }
                         }
                     }
-                    .disabled(status == .testing || (provider == .deepSeek && savedKey.isEmpty))
+                    .disabled(status == .testing || Keychain.effective().isEmpty)
 
                     if status == .ok {
                         Label(statusText, systemImage: "checkmark.circle.fill")
@@ -154,7 +162,7 @@ struct SettingsView: View {
             var reply = ""
             for try await event in await session.send(
                 "Reply with the single word: connected",
-                apiKey: savedKey.isEmpty ? "local" : savedKey,
+                apiKey: Keychain.effective(),
                 context: StudyContext()
             ) {
                 if case let .speech(text) = event { reply += text }
