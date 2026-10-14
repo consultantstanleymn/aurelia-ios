@@ -51,6 +51,8 @@ final class BrainClientTests: XCTestCase {
         XCTAssertTrue(BrainConfiguration.freeModels.allSatisfy { $0.endpoint == BrainConfiguration.consoleBase })
         // The default has to be the zero-retention one: prompts carry the learner's own answers.
         XCTAssertEqual(BrainConfiguration.spaceBunnyFree.model, "space-bunny-free")
+        // The default must not be the gateway: the free tier refuses a direct call.
+        XCTAssertFalse(BrainConfiguration.spaceBunnyFree.endpoint.host?.contains("opencode.ai") ?? true)
     }
 }
 

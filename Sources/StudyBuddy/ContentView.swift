@@ -21,10 +21,10 @@ struct ContentView: View {
             Theme.background.ignoresSafeArea()
             // A gold pool behind everything, matching the app icon so the two read as one object.
             RadialGradient(
-                colors: [Theme.gold.opacity(0.13), .clear],
+                colors: [Theme.gold.opacity(0.22), .clear],
                 center: .init(x: 0.5, y: 0.06),
                 startRadius: 10,
-                endRadius: 420
+                endRadius: 460
             )
             .ignoresSafeArea()
 
@@ -35,7 +35,7 @@ struct ContentView: View {
                 composer
             }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(.light)
         .task { tutor.configure(brain: .spaceBunnyFree, transport: URLSessionBrainTransport()) }
     }
 
@@ -172,7 +172,7 @@ struct ContentView: View {
             } label: {
                 Image(systemName: tutor.isThinking ? "ellipsis" : "arrow.up")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(Theme.background)
+                    .foregroundStyle(Theme.text)
                     .frame(width: 42, height: 42)
                     .background(Circle().fill(Theme.gold))
             }
@@ -184,7 +184,7 @@ struct ContentView: View {
         .padding(.horizontal, 14)
         .padding(.top, 8)
         .padding(.bottom, 10)
-        .background(.ultraThinMaterial)
+        .background(.thinMaterial)
         .overlay(alignment: .top) {
             Rectangle().fill(Theme.hairline).frame(height: 1)
         }

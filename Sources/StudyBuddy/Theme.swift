@@ -14,22 +14,32 @@ import SwiftUI
 enum Theme {
     // MARK: - colour
 
-    static let background = Color(red: 0.039, green: 0.039, blue: 0.043)
-    static let raised = Color(red: 0.075, green: 0.075, blue: 0.086)
+    /// Warm white rather than pure #FFFFFF: a page this large in flat white vibrates against dark
+    /// surroundings, and a tutor used at a desk at night should not be a lamp.
+    static let background = Color(red: 0.992, green: 0.988, blue: 0.976)
+    static let raised = Color(red: 1.0, green: 1.0, blue: 1.0)
 
     /// Sampled from `crab.svg`'s `#F0C94A`.
+    ///
+    /// Two golds, because one cannot do both jobs. The bright one is a fill and sits under dark
+    /// text; on white it measures about 1.8:1 and would fail contrast outright as a foreground, so
+    /// anything readable in gold uses `goldInk` instead, which is the same hue taken down to a
+    /// bronze. Keeping both derived from one sample is what stops the icon and the text drifting.
     static let gold = Color(red: 0.941, green: 0.788, blue: 0.290)
     static let goldDeep = Color(red: 0.831, green: 0.627, blue: 0.090)
-    static let goldPale = Color(red: 1.0, green: 0.953, blue: 0.769)
+    /// For gold text on a light background. About 5.4:1 on `background`.
+    static let goldInk = Color(red: 0.478, green: 0.361, blue: 0.043)
+    static let goldPale = Color(red: 0.976, green: 0.941, blue: 0.831)
 
-    static let text = Color.white
-    static let textMuted = Color(red: 0.647, green: 0.647, blue: 0.678)
-    static let hairline = Color.white.opacity(0.10)
+    static let text = Color(red: 0.086, green: 0.082, blue: 0.063)
+    static let textMuted = Color(red: 0.404, green: 0.388, blue: 0.333)
+    static let hairline = Color(red: 0.086, green: 0.082, blue: 0.063).opacity(0.12)
 
-    /// The two bubbles. The tutor's is gold-tinted and slightly raised so the eye can find it
-    /// without needing an avatar on every line.
-    static let tutorBubble = Color(red: 0.110, green: 0.106, blue: 0.098)
-    static let learnerBubble = Color.white.opacity(0.07)
+    /// The tutor's bubble is white on the cream page, so it lifts by being lighter rather than by
+    /// being tinted; the learner's is gold-tinted so the two sides of the conversation are
+    /// distinguishable at a glance without an avatar on every line.
+    static let tutorBubble = Color.white
+    static let learnerBubble = Color(red: 0.976, green: 0.941, blue: 0.831)
 
     // MARK: - type
 
@@ -56,7 +66,7 @@ private struct GlassSurface: ViewModifier {
         } else {
             content.background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
+                    .fill(.thinMaterial)
                     .overlay(
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                             .strokeBorder(Theme.hairline, lineWidth: 1)
@@ -115,7 +125,7 @@ struct CaptionRow: View {
                             .overlay(
                                 RoundedRectangle(cornerRadius: 19, style: .continuous)
                                     .strokeBorder(
-                                        caption.who == .tutor ? Theme.gold.opacity(0.16) : .clear,
+                                        caption.who == .tutor ? Theme.gold.opacity(0.38) : .clear,
                                         lineWidth: 1
                                     )
                             )

@@ -31,11 +31,29 @@ public struct BrainConfiguration: Equatable, Sendable {
     /// so this is the whole reason the tutor can run without a paid API key.
     public static let consoleBase = URL(string: "https://opencode.ai/inference/v1/chat/completions")!
 
-    /// A free Console model. Its provider is zero-retention and does not train on prompts, which
-    /// is the one to keep as the default: the tutor's prompts contain study material and the
-    /// user's own written answers.
+    /// A free Console model.
+    ///
+    /// Its provider is zero-retention and does not train on prompts, which is why it is the
+    /// default: the tutor's prompts carry the learner's own written answers.
+    ///
+    /// The endpoint is the local bridge, not the gateway. The gateway answers a direct call from a
+    /// phone with:
+    ///
+    ///     403  "OpenCode's free tier can only be used from within OpenCode."
+    ///
+    /// The restriction is on the client, not the key. `tools/bridge/opencode_bridge.py` speaks
+    /// OpenAI's shape on the front and shells out to `opencode run` on the back, which is inside
+    /// OpenCode, which is allowed. That is the only way to reach the free tier from an app.
     public static let spaceBunnyFree = BrainConfiguration(
-        endpoint: consoleBase, model: "space-bunny-free", provider: "OpenCode"
+        endpoint: URL(string: "http://127.0.0.1:8787/v1/chat/completions")!,
+        model: "space-bunny-free",
+        provider: "opencode bridge (free)"
+    )
+
+    /// The Console gateway. Kept because the paid models do work from anywhere — if this account
+    /// ever has funds in it, pointing here is the whole change.
+    public static let console = BrainConfiguration(
+        endpoint: consoleBase, model: "glm-5.3-flash", provider: "OpenCode"
     )
 
     /// The other free Console models, for Settings. Several are explicitly zero-retention; the

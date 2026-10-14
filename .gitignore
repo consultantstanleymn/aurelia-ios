@@ -14,3 +14,6 @@ Sources/StudyBuddy/Resources/Content/*
 
 # xtool LSP scaffolding
 .bsp/
+
+# Staged curricula are a build input, pulled from the sibling curriculum repositories by
+# tools/stage-content.sh. Never committed.

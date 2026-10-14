@@ -17,6 +17,6 @@
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Your spoken answers are transcribed on device to be sent to the tutor.</string>
 	<key>UIUserInterfaceStyle</key>
-	<string>Dark</string>
+	<string>Light</string>
 </dict>
 </plist>
