@@ -46,6 +46,13 @@ let package = Package(
             dependencies: ["StudyBuddyCore"],
             path: "Sources/StudyBuddy",
             resources: [
+                // The mascot. PNG rather than SVG because SwiftUI's Image does not rasterise SVG,
+                // and xtool has no actool and no asset catalog — so there is no .xcassets to hang
+                // an imageset on. A loose @1x/@2x/@3x trio in the bundle is the only shape that
+                // works here, and Image("crab") finds it by name.
+                .copy("Resources/crab@1x.png"),
+                .copy("Resources/crab@2x.png"),
+                .copy("Resources/crab@3x.png"),
                 // The three curricula, staged by scripts/stage-content.sh from the sibling
                 // curriculum repositories. A build input, so .gitignore says so.
                 .copy("Resources/Content")
