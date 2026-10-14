@@ -15,7 +15,7 @@ import SwiftUI
 // Linux at all. Everything else in the app is ordinary; that is not.
 
 @main
-struct StudyBuddyApp: App {
+struct AureliaApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()

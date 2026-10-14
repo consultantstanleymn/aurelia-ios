@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>Study Buddy</string>
+	<string>Aurelia</string>
 	<key>CFBundleName</key>
-	<string>Study Buddy</string>
+	<string>Aurelia</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIBackgroundModes</key>
@@ -13,7 +13,7 @@
 		<string>audio</string>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Study Buddy listens so you can talk to your tutor instead of typing.</string>
+	<string>Aurelia listens so you can talk to your tutor instead of typing.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Your spoken answers are transcribed on device to be sent to the tutor.</string>
 	<key>UIUserInterfaceStyle</key>

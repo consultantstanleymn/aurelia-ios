@@ -9,7 +9,11 @@ import StudyBuddyCore
 /// interaction is talk, reply, talk.
 struct ContentView: View {
     @State private var tutor = TutorController(voice: SystemVoice())
+    /// Drives a single warning in the header until the key is added. Hidden once it is set, and
+    /// never a modal, because the tutor is otherwise ready to go.
+    @State private var hasKey = false
     @State private var draft = ""
+    @State private var showingSettings = false
     @FocusState private var composerFocused: Bool
 
     private var canSend: Bool {
@@ -36,7 +40,13 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(.light)
-        .task { tutor.configure(brain: .spaceBunnyFree, transport: URLSessionBrainTransport()) }
+        .task {
+            tutor.configure(brain: .deepSeek, transport: URLSessionBrainTransport())
+            hasKey = Keychain.read() != nil
+        }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView().onDisappear { hasKey = Keychain.read() != nil }
+        }
     }
 
     // MARK: - header
@@ -53,6 +63,14 @@ struct ContentView: View {
                     .foregroundStyle(Theme.textMuted)
             }
             Spacer(minLength: 8)
+            Button { showingSettings = true } label: {
+                Image(systemName: hasKey ? "gearshape" : "key.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(hasKey ? Theme.textMuted : Theme.goldInk)
+                    .frame(width: 34, height: 34)
+                    .background(Circle().fill(hasKey ? Color.clear : Theme.goldPale))
+            }
+            .accessibilityLabel("Settings")
             if tutor.isSpeaking || tutor.isThinking {
                 HStack(spacing: 7) {
                     SpeakingBars(isActive: tutor.isSpeaking || tutor.isThinking)
@@ -71,11 +89,11 @@ struct ContentView: View {
     }
 
     private var crabMark: some View {
-        Image("crab")
+        Image("aurelia")
             .resizable()
             .interpolation(.none)
-            .frame(width: 38, height: 30)
-            .accessibilityLabel("Study Buddy")
+            .frame(width: 34, height: 34)
+            .accessibilityLabel("Aurelia")
     }
 
     // MARK: - board
@@ -132,9 +150,9 @@ struct ContentView: View {
     private var emptyState: some View {
         VStack(spacing: 16) {
             Spacer(minLength: 40)
-            Image("crab")
+            Image("aurelia")
                 .resizable().interpolation(.none)
-                .frame(width: 74, height: 58)
+                .frame(width: 68, height: 68)
                 .opacity(0.9)
             Text("Ready when you are.")
                 .font(Theme.display(24))
@@ -177,6 +195,16 @@ struct ContentView: View {
                     .background(Circle().fill(Theme.gold))
             }
             .disabled(!canSend)
+            .overlay(alignment: .bottom) {
+                // Nudge in place rather than blocking the send, so the reason is visible without
+                // a modal the first time it happens.
+                if !hasKey && !draft.isEmpty {
+                    Text("Add a key")
+                        .font(Theme.label(10))
+                        .foregroundStyle(Theme.goldInk)
+                        .offset(y: 26)
+                }
+            }
             .opacity(canSend ? 1 : 0.4)
             .animation(.easeOut(duration: 0.15), value: canSend)
             .accessibilityLabel("Send")

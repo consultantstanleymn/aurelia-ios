@@ -20,7 +20,7 @@ import PackageDescription
 // exists while a machine is running and reachable. iOS ships both halves on-device, so the same
 // tutor works on a plane with the network off.
 let package = Package(
-    name: "StudyBuddy",
+    name: "Aurelia",
     platforms: [
         .iOS("17.4"),
         .macOS(.v14),
@@ -28,8 +28,8 @@ let package = Package(
     products: [
         // xtool wants a library product and supplies the entry point and the bundle itself.
         .library(
-            name: "StudyBuddy",
-            targets: ["StudyBuddy"]
+            name: "Aurelia",
+            targets: ["Aurelia"]
         ),
         .library(
             name: "StudyBuddyCore",
@@ -42,17 +42,17 @@ let package = Package(
             path: "Sources/StudyBuddyCore"
         ),
         .target(
-            name: "StudyBuddy",
+            name: "Aurelia",
             dependencies: ["StudyBuddyCore"],
             path: "Sources/StudyBuddy",
             resources: [
-                // The mascot. PNG rather than SVG because SwiftUI's Image does not rasterise SVG,
+                // The mark. PNG rather than SVG because SwiftUI's Image does not rasterise SVG,
                 // and xtool has no actool and no asset catalog — so there is no .xcassets to hang
                 // an imageset on. A loose @1x/@2x/@3x trio in the bundle is the only shape that
-                // works here, and Image("crab") finds it by name.
-                .copy("Resources/crab@1x.png"),
-                .copy("Resources/crab@2x.png"),
-                .copy("Resources/crab@3x.png"),
+                // works here, and Image("aurelia") finds it by name.
+                .copy("Resources/aurelia@1x.png"),
+                .copy("Resources/aurelia@2x.png"),
+                .copy("Resources/aurelia@3x.png"),
                 // The three curricula, staged by scripts/stage-content.sh from the sibling
                 // curriculum repositories. A build input, so .gitignore says so.
                 .copy("Resources/Content")

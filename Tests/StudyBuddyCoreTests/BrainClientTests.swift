@@ -46,13 +46,25 @@ final class BrainClientTests: XCTestCase {
         }
     }
 
+    func testDefaultIsDeepSeekAndNotTheLockedGateway() {
+        // The opencode free tier answers a direct call with 403 "can only be used from within
+        // OpenCode", and the paid tier on that account answers 402. Neither may become the default
+        // by accident: that is the bug this assertion exists to prevent.
+        XCTAssertEqual(BrainConfiguration.deepSeek.endpoint.host, "api.deepseek.com")
+        XCTAssertFalse(BrainConfiguration.deepSeek.endpoint.host?.contains("opencode.ai") ?? true)
+        XCTAssertFalse(BrainConfiguration.bridge.endpoint.host?.contains("opencode.ai") ?? true)
+    }
+
+    func testEveryConfigurationExplainsItself() {
+        for configuration in [BrainConfiguration.deepSeek, .bridge] {
+            XCTAssertFalse(configuration.note.isEmpty)
+            XCTAssertFalse(configuration.host.isEmpty)
+        }
+    }
+
     func testFreeModelPresetsAllPointAtOneEndpoint() {
         XCTAssertEqual(BrainConfiguration.freeModels.count, 10)
         XCTAssertTrue(BrainConfiguration.freeModels.allSatisfy { $0.endpoint == BrainConfiguration.consoleBase })
-        // The default has to be the zero-retention one: prompts carry the learner's own answers.
-        XCTAssertEqual(BrainConfiguration.spaceBunnyFree.model, "space-bunny-free")
-        // The default must not be the gateway: the free tier refuses a direct call.
-        XCTAssertFalse(BrainConfiguration.spaceBunnyFree.endpoint.host?.contains("opencode.ai") ?? true)
     }
 }
 
@@ -88,7 +100,7 @@ final class TutorSessionTests: XCTestCase {
         let box = StubTransport.Box()
         let transport = StubTransport(chunks: chunks, captured: box)
         let session = TutorSession(
-            configuration: .spaceBunnyFree,
+            configuration: .deepSeek,
             transport: transport,
             prompts: PromptBuilder()
         )
@@ -118,7 +130,7 @@ final class TutorSessionTests: XCTestCase {
     func testHistoryKeepsTheReplyButStripsItsTags() async throws {
         let box = StubTransport.Box()
         let session = TutorSession(
-            configuration: .spaceBunnyFree,
+            configuration: .deepSeek,
             transport: StubTransport(chunks: ["Hi <focus nodes=\"a\"/> there"], captured: box),
             prompts: PromptBuilder()
         )
@@ -132,7 +144,7 @@ final class TutorSessionTests: XCTestCase {
     func testSystemPromptLeadsAndReflectsContext() async throws {
         let box = StubTransport.Box()
         let session = TutorSession(
-            configuration: .spaceBunnyFree,
+            configuration: .deepSeek,
             transport: StubTransport(chunks: ["ok"], captured: box),
             prompts: PromptBuilder()
         )

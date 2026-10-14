@@ -1,6 +1,6 @@
 version: 1
-product: StudyBuddy
-bundleID: ch.stanley.studybuddy
+product: Aurelia
+bundleID: ch.stanley.aurelia
 
 infoPath: Support/Info.plist
 
@@ -9,4 +9,4 @@ infoPath: Support/Info.plist
 # the 1024 master and iOS scales it.
 iconPath: Support/AppIcon.png
 
-entitlementsPath: Support/StudyBuddy.entitlements
+entitlementsPath: Support/Aurelia.entitlements

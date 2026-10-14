@@ -8,7 +8,7 @@
 	     after boot, so AfterFirstUnlock is the right class rather than WhenUnlocked. -->
 	<key>keychain-access-groups</key>
 	<array>
-		<string>ch.stanley.studybuddy</string>
+		<string>ch.stanley.aurelia</string>
 	</array>
 </dict>
 </plist>

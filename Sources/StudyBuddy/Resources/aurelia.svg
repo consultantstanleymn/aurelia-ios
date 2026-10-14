@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Aurelia">
+  <defs>
+    <!-- One gold, lightening upward. The mark has to sit on a cream page and on a white icon,
+         so it carries no dark mass at all. -->
+    <linearGradient id="aurelia" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#B8860B"/>
+      <stop offset="45%" stop-color="#E0B03A"/>
+      <stop offset="100%" stop-color="#F7DC8A"/>
+    </linearGradient>
+    <linearGradient id="core" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#C9971A"/>
+      <stop offset="100%" stop-color="#FBEFC2"/>
+    </linearGradient>
+  </defs>
+
+  <g fill="url(#aurelia)">
+    <!-- Rays. Long, short, long, short reads as a rhythm rather than a gear, and the rhythm is
+         what stops it looking like a sun clip-art at 24px. -->
+    <rect x="30.6" y="4"  width="2.8" height="9"  rx="1.4"/>
+    <rect x="30.6" y="16" width="2.8" height="5"  rx="1.4"/>
+    <rect x="41.4" y="8.4" width="2.6" height="8.6" rx="1.3" transform="rotate(30 42.7 12.7)"/>
+    <rect x="41.4" y="19" width="2.6" height="4.6" rx="1.3" transform="rotate(30 42.7 21.3)"/>
+    <rect x="48.6" y="20.6" width="2.6" height="8.6" rx="1.3" transform="rotate(60 49.9 24.9)"/>
+    <rect x="44.6" y="29.4" width="2.6" height="4.6" rx="1.3" transform="rotate(60 45.9 31.7)"/>
+    <rect x="50.4" y="36"  width="2.6" height="8.6" rx="1.3" transform="rotate(90 51.7 40.3)"/>
+    <rect x="43.4" y="40.4" width="2.6" height="4.6" rx="1.3" transform="rotate(90 44.7 42.7)"/>
+    <rect x="48.6" y="49.4" width="2.6" height="8.6" rx="1.3" transform="rotate(120 49.9 53.7)"/>
+    <rect x="41.4" y="46.4" width="2.6" height="4.6" rx="1.3" transform="rotate(120 42.7 48.7)"/>
+    <rect x="41.4" y="55.6" width="2.6" height="8.6" rx="1.3" transform="rotate(150 42.7 59.9)"/>
+    <rect x="30.6" y="54.2" width="2.8" height="5"  rx="1.4" transform="rotate(180 32 56.7)"/>
+    <rect x="22.6" y="55.6" width="2.6" height="8.6" rx="1.3" transform="rotate(210 23.9 59.9)"/>
+    <rect x="19.4" y="46.4" width="2.6" height="4.6" rx="1.3" transform="rotate(210 20.7 48.7)"/>
+    <rect x="15.4" y="49.4" width="2.6" height="8.6" rx="1.3" transform="rotate(240 16.7 53.7)"/>
+    <rect x="17.4" y="40.4" width="2.6" height="4.6" rx="1.3" transform="rotate(240 18.7 42.7)"/>
+    <rect x="13.6" y="36"  width="2.6" height="8.6" rx="1.3" transform="rotate(270 14.9 40.3)"/>
+    <rect x="19.4" y="29.4" width="2.6" height="4.6" rx="1.3" transform="rotate(270 20.7 31.7)"/>
+    <rect x="15.4" y="20.6" width="2.6" height="8.6" rx="1.3" transform="rotate(300 16.7 24.9)"/>
+    <rect x="22.6" y="16"  width="2.6" height="4.6" rx="1.3" transform="rotate(300 23.9 18.3)"/>
+    <rect x="22.6" y="8.4"  width="2.6" height="8.6" rx="1.3" transform="rotate(330 23.9 12.7)"/>
+    <rect x="22.6" y="19"   width="2.6" height="4.6" rx="1.3" transform="rotate(330 23.9 21.3)"/>
+  </g>
+
+  <!-- The disc, slightly proud of the rays so the mark keeps a solid centre at small sizes. -->
+  <circle cx="32" cy="32" r="14" fill="url(#core)"/>
+  <!-- A lighter core, offset up, so the disc reads as lit rather than as a flat token. -->
+  <circle cx="29.5" cy="29" r="8.5" fill="#FFF6DA" opacity="0.55"/>
+</svg>

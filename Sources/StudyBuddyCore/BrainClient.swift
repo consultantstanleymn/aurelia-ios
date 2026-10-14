@@ -11,7 +11,7 @@ import FoundationNetworking
 /// The tutor was written against an OpenAI-compatible `/chat/completions` endpoint, and every
 /// provider used since has kept that shape. That is the whole reason swapping brains is two
 /// settings rather than a rewrite, and this file is the list of them.
-public struct BrainConfiguration: Equatable, Sendable {
+public struct BrainConfiguration: Equatable, Hashable, Sendable {
     /// The chat completions endpoint. No trailing slash.
     public var endpoint: URL
     /// The model id, exactly as the provider names it.
@@ -31,30 +31,38 @@ public struct BrainConfiguration: Equatable, Sendable {
     /// so this is the whole reason the tutor can run without a paid API key.
     public static let consoleBase = URL(string: "https://opencode.ai/inference/v1/chat/completions")!
 
-    /// A free Console model.
+    /// The default. DeepSeek, straight from the phone.
     ///
-    /// Its provider is zero-retention and does not train on prompts, which is why it is the
-    /// default: the tutor's prompts carry the learner's own written answers.
-    ///
-    /// The endpoint is the local bridge, not the gateway. The gateway answers a direct call from a
-    /// phone with:
+    /// Not an accident of convenience: the opencode free tier refuses a direct call with
     ///
     ///     403  "OpenCode's free tier can only be used from within OpenCode."
     ///
-    /// The restriction is on the client, not the key. `tools/bridge/opencode_bridge.py` speaks
-    /// OpenAI's shape on the front and shells out to `opencode run` on the back, which is inside
-    /// OpenCode, which is allowed. That is the only way to reach the free tier from an app.
-    public static let spaceBunnyFree = BrainConfiguration(
+    /// which is a restriction on the client rather than on the key, and the paid tier on that same
+    /// account answers 402 insufficient funds. DeepSeek has neither problem, costs a fraction of a
+    /// cent per session, and needs no machine switched on — so the laptop dependency is gone.
+    public static let deepSeek = BrainConfiguration(
+        endpoint: URL(string: "https://api.deepseek.com/chat/completions")!,
+        model: "deepseek-chat",
+        provider: "DeepSeek"
+    )
+
+    /// The local bridge, which reaches opencode's free models by being inside opencode.
+    ///
+    /// Free, and the reason `tools/bridge/opencode_bridge.py` exists. It costs a laptop that has
+    /// to stay switched on, which is why it is not the default any more.
+    public static let bridge = BrainConfiguration(
         endpoint: URL(string: "http://127.0.0.1:8787/v1/chat/completions")!,
         model: "space-bunny-free",
         provider: "opencode bridge (free)"
     )
 
-    /// The Console gateway. Kept because the paid models do work from anywhere — if this account
-    /// ever has funds in it, pointing here is the whole change.
-    public static let console = BrainConfiguration(
-        endpoint: consoleBase, model: "glm-5.3-flash", provider: "OpenCode"
-    )
+    /// One line under the provider in Settings, so the choice is not a guess.
+    public var note: String {
+        switch provider {
+        case "DeepSeek": return "Works from the phone with no other machine running."
+        default: return "Free, but your computer has to be on and you on the same network."
+        }
+    }
 
     /// The other free Console models, for Settings. Several are explicitly zero-retention; the
     /// ones that may use prompts for improvement are marked so the choice stays informed.
