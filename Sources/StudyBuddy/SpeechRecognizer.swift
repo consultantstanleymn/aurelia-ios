@@ -57,18 +57,59 @@ final class SpeechRecognizer {
     }
 
     func start() {
+        NSLog("aurelia: mic start requested")
         guard let recognizer, recognizer.isAvailable else {
+            NSLog("aurelia: recognizer unavailable (nil or !isAvailable)")
             state = .unavailable("Speech recognition is not available on this device.")
             return
         }
+        NSLog("aurelia: recognizer ok, onDevice=\(recognizer.supportsOnDeviceRecognition)")
 
-        SFSpeechRecognizer.requestAuthorization { status in
-            Task { @MainActor in
-                guard status == .authorized else {
-                    self.state = .unavailable("Speech recognition was declined in Settings.")
-                    return
+        // Two permissions, not one. SFSpeechRecognizer only asks about speech recognition;
+        // the microphone is a separate grant, and asking for one does not ask for the other.
+        // Without the second one the audio engine fails to start and the recogniser never hears
+        // a sample — which looks exactly like a dead microphone button.
+        Task { @MainActor in
+            let speechOK = await requestSpeechAuthorization()
+            guard speechOK else {
+                NSLog("aurelia: speech authorization denied")
+                self.state = .unavailable("Speech recognition was declined. Enable it in Settings.")
+                return
+            }
+            NSLog("aurelia: speech authorized, asking for microphone")
+            let micOK = await requestMicrophoneAuthorization()
+            guard micOK else {
+                NSLog("aurelia: microphone authorization denied")
+                self.state = .unavailable("The microphone was declined. Enable it in Settings.")
+                return
+            }
+            NSLog("aurelia: microphone authorized, beginning")
+            self.beginListening(recognizer: recognizer)
+        }
+    }
+
+    private func requestSpeechAuthorization() async -> Bool {
+        await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { status in
+                NSLog("aurelia: speech status=\(status.rawValue)")
+                continuation.resume(returning: status == .authorized)
+            }
+        }
+    }
+
+    private func requestMicrophoneAuthorization() async -> Bool {
+        if #available(iOS 17.0, *) {
+            return await withCheckedContinuation { continuation in
+                AVAudioApplication.requestRecordPermission { granted in
+                    NSLog("aurelia: mic status granted=\(granted)")
+                    continuation.resume(returning: granted)
                 }
-                self.beginListening(recognizer: recognizer)
+            }
+        }
+        return await withCheckedContinuation { continuation in
+            AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                NSLog("aurelia: mic status granted=\(granted)")
+                continuation.resume(returning: granted)
             }
         }
     }
@@ -97,6 +138,7 @@ final class SpeechRecognizer {
             return
         }
 
+        NSLog("aurelia: session configured, reading input format")
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
@@ -107,6 +149,7 @@ final class SpeechRecognizer {
 
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
+        NSLog("aurelia: format sampleRate=\(format.sampleRate) channels=\(format.channelCount)")
         // installTap raises rather than throws on a degenerate format, so it has to be checked
         // before it is called rather than caught.
         guard format.sampleRate > 0, format.channelCount > 0 else {
@@ -121,6 +164,7 @@ final class SpeechRecognizer {
             request.append(buffer)
         }
         isTapInstalled = true
+        NSLog("aurelia: tap installed")
 
         engine.prepare()
         do {
@@ -131,6 +175,7 @@ final class SpeechRecognizer {
             return
         }
 
+        NSLog("aurelia: engine started, state=listening")
         state = .listening
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             Task { @MainActor in

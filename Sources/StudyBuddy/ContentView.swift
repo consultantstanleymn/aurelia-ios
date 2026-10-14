@@ -35,6 +35,9 @@ struct ContentView: View {
 
             VStack(spacing: 0) {
                 header
+                // The reason the mic is not working used to be written into the recogniser and
+                // never drawn, so a denied permission looked exactly like a dead button.
+                micNotice
                 board
                 captions
                 composer
@@ -44,6 +47,16 @@ struct ContentView: View {
         .task {
             tutor.configure(brain: .deepSeek, transport: URLSessionBrainTransport())
             hasKey = !Keychain.effective().isEmpty
+            // Self-test hook. `xtool launch <bundle-id> -selftest-mic` exercises the whole
+            // permission path without anyone having to tap a button, which is the only way to
+            // find out what the recogniser is doing while the app is on a desk.
+            if ProcessInfo.processInfo.arguments.contains("-selftest-mic") {
+                NSLog("aurelia: selftest-mic launch argument seen")
+                ears.start()
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                NSLog("aurelia: selftest transcript=\(ears.transcript.prefix(80))")
+                ears.stop()
+            }
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView().onDisappear { hasKey = !Keychain.effective().isEmpty }
@@ -95,6 +108,30 @@ struct ContentView: View {
             .interpolation(.none)
             .frame(width: 34, height: 34)
             .accessibilityLabel("Aurelia")
+    }
+
+    @ViewBuilder
+    private var micNotice: some View {
+        if case let .unavailable(reason) = ears.state {
+            HStack(spacing: 10) {
+                Image(systemName: "mic.slash.fill")
+                    .foregroundStyle(Theme.goldInk)
+                Text(reason)
+                    .font(Theme.body(14))
+                    .foregroundStyle(Theme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Theme.goldPale)
+            .overlay(alignment: .top) {
+                Rectangle().fill(Theme.hairline).frame(height: 1)
+            }
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Theme.hairline).frame(height: 1)
+            }
+        }
     }
 
     // MARK: - board
