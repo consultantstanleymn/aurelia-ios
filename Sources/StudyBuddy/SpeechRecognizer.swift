@@ -39,6 +39,9 @@ final class SpeechRecognizer {
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private let engine = AVAudioEngine()
+    /// installTap and removeTap have to be paired. Removing a tap that was never installed logs an
+    /// error and, on some releases, traps — and stop() can be reached from three places.
+    private var isTapInstalled = false
 
     /// True when this device can transcribe without a network round trip.
     var isOnDeviceAvailable: Bool {
@@ -74,29 +77,50 @@ final class SpeechRecognizer {
         transcript = ""
         finalText = ""
 
+        // The session has to be configured AND activated before the input node will report a
+        // usable format. Reading outputFormat first returns 0 Hz and 0 channels, and installTap
+        // raises an Objective-C exception on an invalid format rather than throwing a Swift
+        // error, which is a hard crash with nothing in the log. That ordering is the whole bug.
         let session = AVAudioSession.sharedInstance()
-        // .record with .duckOthers and .allowBluetooth: measurement is the whole point of the app,
-        // and a study session is often next to a laptop speaker.
-        try? session.setCategory(
-            .record,
-            mode: .measurement,
-            options: [.duckOthers, .allowBluetooth, .defaultToSpeaker]
-        )
-        try? session.setActive(true, options: .notifyOthersOnDeactivation)
+        // .playAndRecord rather than .record: the tutor speaks through AVSpeechSynthesizer, and a
+        // record-only category leaves the device unable to play its reply at all. .measurement
+        // mode is the right processing for a tutor that must hear a quiet spoken answer.
+        do {
+            try session.setCategory(
+                .playAndRecord,
+                mode: .measurement,
+                options: [.defaultToSpeaker, .allowBluetooth, .duckOthers]
+            )
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+            state = .unavailable("Could not open the microphone: \(error.localizedDescription)")
+            return
+        }
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
         // Refuse the network rather than fall back to it. If the device cannot do this locally the
-        // recogniser simply fails and the user is told, which is the correct outcome.
+        // recogniser fails and the user is told, which is the correct outcome.
         request.requiresOnDeviceRecognition = recognizer.supportsOnDeviceRecognition
         self.request = request
 
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
-        input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+        // installTap raises rather than throws on a degenerate format, so it has to be checked
+        // before it is called rather than caught.
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            request.endAudio()
+            self.request = nil
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            state = .unavailable("No usable audio input. Close any other app that may be using the mic.")
+            return
+        }
+
+        input.installTap(onBus: 0, bufferSize: 2048, format: format) { buffer, _ in
             request.append(buffer)
         }
+        isTapInstalled = true
 
         engine.prepare()
         do {
@@ -129,9 +153,10 @@ final class SpeechRecognizer {
     /// The audio engine must be torn down or the next start throws, which is the single most
     /// common way a speech recogniser gets stuck after two uses.
     func stop() {
-        if engine.isRunning {
-            engine.stop()
+        if engine.isRunning { engine.stop() }
+        if isTapInstalled {
             engine.inputNode.removeTap(onBus: 0)
+            isTapInstalled = false
         }
         request?.endAudio()
         task?.finish()
