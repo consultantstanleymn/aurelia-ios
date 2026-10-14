@@ -1,0 +1,12 @@
+version: 1
+product: StudyBuddy
+bundleID: ch.stanley.studybuddy
+
+infoPath: Support/Info.plist
+
+# No actool in xtool, so the icon is a loose PNG at the bundle root rather than a compiled
+# Assets.car, and xtool copies exactly ONE file for iconPath (Packer.swift:199). That one file is
+# the 1024 master and iOS scales it.
+iconPath: Support/AppIcon.png
+
+entitlementsPath: Support/StudyBuddy.entitlements

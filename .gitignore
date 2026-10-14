@@ -1,0 +1,16 @@
+# xtool build products
+xtool/
+.build/
+*.ipa
+*.app/
+
+# Staged curriculum content. These are cloned from the sibling curriculum repositories and are a
+# build input, not source — see scripts/stage-content.sh.
+Sources/StudyBuddy/Resources/Content/*
+!Sources/StudyBuddy/Resources/Content/.keep
+
+# macOS
+.DS_Store
+
+# xtool LSP scaffolding
+.bsp/
