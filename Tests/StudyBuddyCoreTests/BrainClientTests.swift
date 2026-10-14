@@ -52,19 +52,13 @@ final class BrainClientTests: XCTestCase {
         // by accident: that is the bug this assertion exists to prevent.
         XCTAssertEqual(BrainConfiguration.deepSeek.endpoint.host, "api.deepseek.com")
         XCTAssertFalse(BrainConfiguration.deepSeek.endpoint.host?.contains("opencode.ai") ?? true)
-        XCTAssertFalse(BrainConfiguration.bridge.endpoint.host?.contains("opencode.ai") ?? true)
     }
 
     func testEveryConfigurationExplainsItself() {
-        for configuration in [BrainConfiguration.deepSeek, .bridge] {
+        for configuration in [BrainConfiguration.deepSeek] {
             XCTAssertFalse(configuration.note.isEmpty)
             XCTAssertFalse(configuration.host.isEmpty)
         }
-    }
-
-    func testFreeModelPresetsAllPointAtOneEndpoint() {
-        XCTAssertEqual(BrainConfiguration.freeModels.count, 10)
-        XCTAssertTrue(BrainConfiguration.freeModels.allSatisfy { $0.endpoint == BrainConfiguration.consoleBase })
     }
 }
 

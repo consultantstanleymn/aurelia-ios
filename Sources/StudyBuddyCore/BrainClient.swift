@@ -46,38 +46,13 @@ public struct BrainConfiguration: Equatable, Hashable, Sendable {
         provider: "DeepSeek"
     )
 
-    /// The local bridge, which reaches opencode's free models by being inside opencode.
-    ///
-    /// Free, and the reason `tools/bridge/opencode_bridge.py` exists. It costs a laptop that has
-    /// to stay switched on, which is why it is not the default any more.
-    public static let bridge = BrainConfiguration(
-        endpoint: URL(string: "http://127.0.0.1:8787/v1/chat/completions")!,
-        model: "space-bunny-free",
-        provider: "opencode bridge (free)"
-    )
-
     /// One line under the provider in Settings, so the choice is not a guess.
     public var note: String {
         switch provider {
         case "DeepSeek": return "Works from the phone with no other machine running."
-        default: return "Free, but your computer has to be on and you on the same network."
+        default: return "Tried and refused: the Console free tier only answers opencode itself."
         }
     }
-
-    /// The other free Console models, for Settings. Several are explicitly zero-retention; the
-    /// ones that may use prompts for improvement are marked so the choice stays informed.
-    public static let freeModels: [BrainConfiguration] = [
-        .init(endpoint: consoleBase, model: "space-bunny-free", provider: "OpenCode"),
-        .init(endpoint: consoleBase, model: "big-pickle", provider: "OpenCode"),
-        .init(endpoint: consoleBase, model: "cat-jam-free", provider: "OpenCode"),
-        .init(endpoint: consoleBase, model: "longcat-2.5-preview-free", provider: "OpenCode"),
-        .init(endpoint: consoleBase, model: "step-5-preview-free", provider: "OpenCode"),
-        .init(endpoint: consoleBase, model: "exo-free", provider: "OpenCode"),
-        .init(endpoint: consoleBase, model: "mimo-v2.6-flash-free", provider: "OpenCode"),
-        .init(endpoint: consoleBase, model: "mimo-v2.5-free", provider: "OpenCode"),
-        .init(endpoint: consoleBase, model: "nemotron-3-ultra-free", provider: "OpenCode"),
-        .init(endpoint: consoleBase, model: "nemotron-3.5-lightning-free", provider: "OpenCode"),
-    ]
 
     /// Paid fallbacks, for when a free model is throttled or the tutor is being used on exam
     /// night rather than practice.

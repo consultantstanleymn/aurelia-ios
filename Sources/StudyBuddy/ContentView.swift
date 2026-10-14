@@ -42,10 +42,10 @@ struct ContentView: View {
         .preferredColorScheme(.light)
         .task {
             tutor.configure(brain: .deepSeek, transport: URLSessionBrainTransport())
-            hasKey = Keychain.read() != nil
+            hasKey = !Keychain.effective().isEmpty
         }
         .sheet(isPresented: $showingSettings) {
-            SettingsView().onDisappear { hasKey = Keychain.read() != nil }
+            SettingsView().onDisappear { hasKey = !Keychain.effective().isEmpty }
         }
     }
 
@@ -150,10 +150,10 @@ struct ContentView: View {
     private var emptyState: some View {
         VStack(spacing: 16) {
             Spacer(minLength: 40)
-            Image("aurelia")
+            Image("crab")
                 .resizable().interpolation(.none)
-                .frame(width: 68, height: 68)
-                .opacity(0.9)
+                .frame(width: 86, height: 76)
+                .opacity(0.95)
             Text("Ready when you are.")
                 .font(Theme.display(24))
                 .foregroundStyle(Theme.text)
@@ -186,7 +186,7 @@ struct ContentView: View {
             Button {
                 let text = draft
                 draft = ""
-                Task { await tutor.send(text, apiKey: "") }
+                Task { await tutor.send(text, apiKey: Keychain.effective()) }
             } label: {
                 Image(systemName: tutor.isThinking ? "ellipsis" : "arrow.up")
                     .font(.system(size: 17, weight: .semibold))

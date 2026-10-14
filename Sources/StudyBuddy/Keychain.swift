@@ -60,6 +60,20 @@ enum Keychain {
         return String(data: data, encoding: .utf8)
     }
 
+    /// The key to actually use.
+    ///
+    /// The Keychain wins so a key can be rotated without a rebuild, and the build-time key is
+    /// the fallback so a fresh install works with nothing pasted into it. Both can be empty, and
+    /// then the app has to say so rather than sending an unauthenticated turn.
+    static func effective() -> String {
+        if let saved = read(), !saved.isEmpty { return saved }
+        // Not behind a compile flag: with the flag unset the branch was dead code and the key
+        // never made it into the binary at all, which looked identical to the key simply being
+        // absent. InjectedAPIKey.value is "" when tools/inject-key.sh has not been run, so an
+        // unconfigured build is still safe.
+        return InjectedAPIKey.value
+    }
+
     static func clear() {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,

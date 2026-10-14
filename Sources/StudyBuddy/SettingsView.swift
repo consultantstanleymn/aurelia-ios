@@ -26,7 +26,6 @@ struct SettingsView: View {
                 Section {
                     Picker("Provider", selection: $provider) {
                         Text("DeepSeek").tag(BrainConfiguration.deepSeek)
-                        Text("Local bridge (free)").tag(BrainConfiguration.bridge)
                     }
                     .pickerStyle(.segmented)
 

@@ -17,3 +17,7 @@ Sources/StudyBuddy/Resources/Content/*
 
 # Staged curricula are a build input, pulled from the sibling curriculum repositories by
 # tools/stage-content.sh. Never committed.
+
+# The key injected by tools/inject-key.sh. Never commit this: it holds a live credential and it
+# would go into history permanently.
+Sources/StudyBuddy/GeneratedAPIKey.swift
