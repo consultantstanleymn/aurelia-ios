@@ -90,43 +90,90 @@ public struct Delivery: Equatable, Sendable {
 /// Ported from the Python `SentenceSplitter`. Two details matter and both were bugs in naive
 /// ports: an abbreviation at the end of a line is not a sentence ending, and a sentence must be
 /// followed by whitespace before it counts, or "3.5" becomes two sentences.
+///
+/// The second one was in this file's own documentation for a long time and not in the code. A
+/// tutor for AWS and networking says "10.0.0.0/8", "v1.0.44" and "0.023 per GB" as a matter of
+/// course, and the old version split every one of them at each full stop — so the CIDR range came
+/// out as eight separate spoken fragments, and the version number as four. Nothing about it looks
+/// like a crash or a wrong answer. It just sounds like the tutor cannot read numbers aloud, which
+/// is precisely the thing it is there to teach.
 public enum SentenceSplitter {
     private static let abbreviations: Set<String> = [
         "e.g", "i.e", "vs", "etc", "mr", "mrs", "dr", "st", "no", "approx",
+        // Not in the Python list, and not needed there: its splitter ran over text it had already
+        // been handed whole. This one runs over a stream, so the difference between "e.g." and the
+        // end of a sentence is often only the next character.
+        "u.s", "u.k", "jr", "sr", "fig", "eq", "cf", "al", "inc", "ltd",
+    ]
+
+    /// Characters that can close a sentence and belong to it: a quote or bracket after the full
+    /// stop is part of what was just said.
+    private static let closers: Set<Character> = [
+        "\"", "'", ")", "]", "}", "\u{201D}", "\u{2019}", "\u{00BB}",
     ]
 
     /// The trailing word if the text ends in something that only looks like a full stop.
     static func trailingAbbreviation(_ text: String) -> String? {
-        let trimmed = text.trimmingCharacters(in: .whitespaces)
-        guard trimmed.hasSuffix(".") else { return nil }
-        let lastWord = trimmed.split(separator: " ").last.map(String.init) ?? ""
-        let bare = lastWord.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Strip the closers first: a line ending `Mr."` is still an abbreviation, and the quote is
+        // not part of the word.
+        while let last = trimmed.last, closers.contains(last) || last == "." {
+            trimmed.removeLast()
+        }
+        guard let lastWord = trimmed.split(separator: " ").last else { return nil }
+        // Stripped from both ends, so `"e.g."` and `U.S.` reduce to something in the list.
+        let bare = lastWord
+            .lowercased()
+            .trimmingCharacters(in: CharacterSet(charactersIn: ".\"'()[]{}\u{201D}\u{2019}"))
+        guard !bare.isEmpty else { return nil }
         return abbreviations.contains(bare) ? bare : nil
     }
 
     /// Splits into sentences, holding back any trailing fragment until more arrives.
+    ///
+    /// The caller keeps the last element and prepends it to the next chunk, so a sentence already
+    /// returned must never be revised. Everything here is written to preserve that: text is only
+    /// ever released once a terminator is followed by whitespace, or the text ends.
     public static func split(_ text: String) -> [String] {
         var sentences: [String] = []
         var current = ""
+        let characters = Array(text)
+        var index = 0
 
-        for character in text {
+        while index < characters.count {
+            let character = characters[index]
             current.append(character)
+            index += 1
             guard character == "." || character == "!" || character == "?" else { continue }
 
-            // Closing quotes and brackets belong to the sentence, not after it.
-            var lookAhead = current
-            while let last = lookAhead.last,
-                  last == "\"" || last == "'" || last == ")" || last == "]" {
-                lookAhead.removeLast()
+            // A closing quote or bracket belongs to the sentence it ends. Looked ahead rather than
+            // appended: taking it into the sentence and then deciding the full stop was an
+            // abbreviation would leave the quote to be read a second time on the next pass, and
+            // the caption would end in two of them.
+            var afterClosers = index
+            while afterClosers < characters.count, closers.contains(characters[afterClosers]) {
+                afterClosers += 1
             }
-            guard lookAhead.last == character else { continue }
 
-            if trailingAbbreviation(lookAhead) != nil { continue }
-            sentences.append(current.trimmingCharacters(in: .whitespaces))
+            // Whitespace after the terminator, or the end of the text. Anything else means the full
+            // stop belongs to the word in front of it: an abbreviation, a decimal, a version, a
+            // range. This single rule is what keeps 10.0.0.0/8 in one piece.
+            if afterClosers < characters.count, !characters[afterClosers].isWhitespace {
+                continue
+            }
+
+            if trailingAbbreviation(current) != nil { continue }
+
+            current.append(contentsOf: characters[index..<afterClosers])
+            let sentence = current.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !sentence.isEmpty { sentences.append(sentence) }
             current = ""
+            index = afterClosers
         }
 
-        let remainder = current.trimmingCharacters(in: .whitespaces)
+        // Newlines included in the trim, and empty sentences dropped. A model reply arrives with
+        // blank lines in it, and a "\n" that survives here is spoken aloud as a caption.
+        let remainder = current.trimmingCharacters(in: .whitespacesAndNewlines)
         if !remainder.isEmpty { sentences.append(remainder) }
         return sentences
     }
