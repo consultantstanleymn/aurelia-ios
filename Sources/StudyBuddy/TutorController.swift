@@ -176,20 +176,26 @@ final class TutorController {
             DiagLog.event("evt.board", ["kind": item.kind, "chars": item.body.count])
 
         case let .note(text):
-            try? progress?.addNote(text, track: track.rawValue, day: day)
+            record("evt.note.failed", ["chars": text.count]) {
+                try progress?.addNote(text, track: track.rawValue, day: day)
+            }
             DiagLog.event("evt.note", ["chars": text.count])
 
         case let .todo(title, body):
-            try? progress?.addTodo(title: title, detail: body, track: track.rawValue, day: day)
+            record("evt.todo.failed", ["title": title]) {
+                try progress?.addTodo(title: title, detail: body, track: track.rawValue, day: day)
+            }
             DiagLog.event("evt.todo", ["title": title])
 
         case let .log(topic, result, level):
             if let store = progress, !topic.isEmpty {
-                try? store.recordAnswer(
-                    track: track.rawValue,
-                    topic: topic,
-                    result: result == "miss" ? .miss : .hit
-                )
+                record("evt.log.failed", ["topic": topic]) {
+                    try store.recordAnswer(
+                        track: track.rawValue,
+                        topic: topic,
+                        result: result == "miss" ? .miss : .hit
+                    )
+                }
                 DiagLog.event("evt.log", ["topic": topic, "result": result, "level": level])
             }
 
@@ -207,19 +213,39 @@ final class TutorController {
 
         case let .covered(section):
             if !section.isEmpty {
-                try? progress?.markCovered(track: track.rawValue, day: day, section: section)
+                record("evt.covered.failed", ["section": section]) {
+                    try progress?.markCovered(track: track.rawValue, day: day, section: section)
+                }
                 await reloadProgress()
             }
 
         case .dayDone:
-            try? progress?.setDayStatus(.done, track: track.rawValue, day: day)
+            record("evt.dayDone.failed", ["day": day]) {
+                try progress?.setDayStatus(.done, track: track.rawValue, day: day)
+            }
             captions.append(Caption(who: .system, text: "Day \(day) done. Back tomorrow."))
             await reloadProgress()
         }
     }
 
+    /// Runs a progress write and says so in the log when it fails.
+    ///
+    /// These were all bare `try?`, which is what hid the store being broken for so long: every
+    /// write threw, every throw was swallowed, and the app looked perfectly healthy while recording
+    /// nothing. The log is the only channel on the device — no console, no debugger, no screenshots
+    /// — so a swallowed failure has to at least leave a mark there.
+    private func record(_ failureEvent: String, _ context: [String: Any], _ work: () throws -> Void) {
+        do {
+            try work()
+        } catch {
+            DiagLog.event(failureEvent, context.merging(["error": "\(error)"]) { _, new in new })
+        }
+    }
+
     private func enqueue(_ sentence: String) {
-        guard !sentence.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        // Newlines included: a model's reply arrives with blank lines in it, and trimming only
+        // spaces leaves a "\n" that reads as non-empty and gets spoken as an empty caption.
+        guard !sentence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         if let last = captions.last, last.who == .tutor, last.isStreaming {
             captions[captions.count - 1].text += " " + sentence
         } else {
