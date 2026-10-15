@@ -177,13 +177,8 @@ public struct URLSessionBrainTransport: BrainTransport, @unchecked Sendable {
                     // identically on both platforms, and real streaming is the point: the tutor
                     // has to start speaking while the model is still writing, not after.
                     let reader = SSEReader()
-                    let task = session.dataTask(with: request) {
-                        data, response, error in reader.finish(data: data, response: response, error: error)
-                    }
-                    reader.attach(task: task)
-
                     var buffer = ""
-                    for try await chunk in reader.deltas() {
+                    for try await chunk in reader.stream(session, request) {
                         buffer += chunk
 
                         // Server-sent events: a blank line terminates a record, `data:` carries it.

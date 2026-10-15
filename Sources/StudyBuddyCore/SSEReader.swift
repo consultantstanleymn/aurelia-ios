@@ -19,22 +19,38 @@ final class SSEReader: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private var task: URLSessionDataTask?
     private var completed = false
 
-    func attach(task: URLSessionDataTask) {
-        lock.lock()
-        self.task = task
-        lock.unlock()
-        task.resume()
-    }
-
-    func deltas() -> AsyncThrowingStream<String, Error> {
+    /// Starts the request and returns the stream of text chunks.
+    ///
+    /// The continuation is created and stored BEFORE the task is resumed, and that order is the
+    /// whole point. Doing it the other way round — create the task, resume it, then build the
+    /// stream — loses the race whenever the response arrives quickly: the delegate fires
+    /// `didReceive` and the completion handler while `continuation` is still nil, both are
+    /// dropped, and the consumer then waits on a continuation that is never finished. On the
+    /// phone that showed up as a turn that started and then hung forever with no error, which is
+    /// what the self-test's `turn.begin` with no `turn.done` was.
+    ///
+    /// Owning the request inside the stream's builder is what makes the ordering impossible to get
+    /// wrong from the call site.
+    func stream(_ session: URLSession, _ request: URLRequest) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             lock.lock()
             self.continuation = continuation
             lock.unlock()
-            continuation.onTermination = { [weak self] reason in
-                guard case .cancelled = reason else { return }
-                self?.task?.cancel()
+
+            let task = session.dataTask(with: request) { [weak self] data, response, error in
+                self?.finish(data: data, response: response, error: error)
             }
+
+            lock.lock()
+            self.task = task
+            lock.unlock()
+
+            continuation.onTermination = { reason in
+                guard case .cancelled = reason else { return }
+                task.cancel()
+            }
+
+            task.resume()
         }
     }
 
