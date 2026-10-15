@@ -139,12 +139,16 @@ struct MermaidView: UIViewRepresentable {
         view.backgroundColor = .clear
         view.scrollView.backgroundColor = .clear
         view.loadHTMLString(Self.document(for: source), baseURL: nil)
+        // Recorded here as well as compared in updateUIView. It was only ever compared, and never
+        // set, so the first update took the early return with a nil coordinator and every update
+        // after it did the same — the board drew one diagram and then kept drawing that one, for
+        // as long as the view stayed alive.
+        context.coordinator.source = source
         return view
     }
 
     func updateUIView(_ view: WKWebView, context: Context) {
-        guard let current = context.coordinator.source else { return }
-        guard current != source else { return }
+        guard context.coordinator.source != source else { return }
         context.coordinator.source = source
         view.loadHTMLString(Self.document(for: source), baseURL: nil)
     }
@@ -158,9 +162,18 @@ struct MermaidView: UIViewRepresentable {
     /// A self-contained page: mermaid from a CDN, light theme forced to match the app, and an error
     /// path that shows the source instead of a blank rectangle when the CDN is unreachable.
     static func document(for source: String) -> String {
+        // The diagram goes inside a JavaScript template literal, so what needs escaping is
+        // JavaScript, not HTML: a backtick would end the literal and `${` would start an
+        // interpolation, either of which turns a labelled box in a flowchart into a blank rectangle
+        // with an error under it.
+        //
+        // It used to be HTML-escaped instead (& and <), which was wrong in the other direction —
+        // that text is the diagram's own source, not markup, so a label reading "R&D < 100" came
+        // out as "R&amp;D &lt; 100" on the board.
         let escaped = source
-            .replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "`", with: "\\`")
+            .replacingOccurrences(of: "${", with: "\\${")
         return """
         <!doctype html><html><head><meta charset="utf-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
