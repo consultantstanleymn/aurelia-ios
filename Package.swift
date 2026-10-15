@@ -37,8 +37,28 @@ let package = Package(
         ),
     ],
     targets: [
+        // A C target whose only job is its header.
+//
+// The Darwin SDK ships a SQLite3 module, so the iOS build imports SQLite3 directly. Linux has the
+// headers and the library but no module map for them, so `canImport(SQLite3)` was false there and
+// every method in ProgressStore compiled to nothing under `swift test` — the store had never been
+// executed by anything. SwiftPM generates a module map from a C target's include directory, which
+// makes this the supported way to get there without an absolute path or an unsafe flag.
+// See Sources/CSQLiteShim/include/CSQLiteShim.h.
+.target(
+            name: "CSQLiteShim",
+            path: "Sources/CSQLiteShim",
+            linkerSettings: [
+                // The generated module map makes the module importable but does not put the library
+                // on the link line, so without this the tests compile and then fail to link on
+                // every sqlite3_* call. Linux only, so the iOS build keeps using the SDK's own
+                // SQLite3 and its autolinking.
+                .linkedLibrary("sqlite3", .when(platforms: [Platform.linux]))
+            ]
+        ),
         .target(
             name: "StudyBuddyCore",
+            dependencies: ["CSQLiteShim"],
             path: "Sources/StudyBuddyCore"
         ),
         .target(
@@ -53,7 +73,7 @@ let package = Package(
                 .copy("Resources/aurelia@1x.png"),
                 .copy("Resources/aurelia@2x.png"),
                 .copy("Resources/aurelia@3x.png"),
-                // The three curricula, staged by scripts/stage-content.sh from the sibling
+                // The three curricula, staged by tools/stage-content.sh from the sibling
                 // curriculum repositories. A build input, so .gitignore says so.
                 .copy("Resources/Content")
             ]

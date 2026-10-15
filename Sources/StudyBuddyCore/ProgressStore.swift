@@ -1,6 +1,14 @@
 import Foundation
+// Two spellings of the same module: the Darwin SDK provides SQLite3, and CSQLiteShim re-exports the
+// system header for Linux, which has no module map of its own. Before the shim existed this
+// checked false on Linux and the whole store below compiled to nothing under `swift test`.
 #if canImport(SQLite3)
 import SQLite3
+#elseif canImport(CSQLiteShim)
+import CSQLiteShim
+#endif
+
+#if canImport(SQLite3) || canImport(CSQLiteShim)
 
 /// `SQLITE_TRANSIENT` tells SQLite to copy bound text rather than keep the pointer, which matters
 /// because a Swift String is not guaranteed to outlive the bind call.
@@ -49,7 +57,7 @@ public final class ProgressStore: @unchecked Sendable {
 
     public init(path: String) throws {
         self.path = path
-        #if canImport(SQLite3)
+        #if canImport(SQLite3) || canImport(CSQLiteShim)
         var database: OpaquePointer?
         let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
         guard sqlite3_open_v2(path, &database, flags, nil) == SQLITE_OK, let database else {
@@ -63,7 +71,7 @@ public final class ProgressStore: @unchecked Sendable {
         try execute("PRAGMA foreign_keys=ON")
         try migrate()
         #endif
-        #if !canImport(SQLite3)
+        #if !(canImport(SQLite3) || canImport(CSQLiteShim))
         // The module still compiles here so the core suite can run on Linux; only the store itself
         // is unavailable, and it says so rather than silently losing everything.
         throw StoreError.unavailable("SQLite3 is not importable on this platform")
@@ -71,15 +79,22 @@ public final class ProgressStore: @unchecked Sendable {
     }
 
     deinit {
-        #if canImport(SQLite3)
+        #if canImport(SQLite3) || canImport(CSQLiteShim)
         if let handle { sqlite3_close(handle) }
         #endif
     }
 
     // MARK: - schema
 
-    private func migrate() throws {
-        try execute("""
+/// The schema, table for table from the Python tutor's `db.py`.
+    ///
+    /// A static constant rather than a string inside `migrate`, because it is run with
+    /// `sqlite3_exec` and nothing else: `sqlite3_prepare_v2` compiles only the **first** statement
+    /// in a string and quietly leaves the rest, so passing all seven CREATE TABLEs to it built one
+    /// table and dropped the other six. Every query afterwards then failed with "no such table",
+    /// which is what the store did on every platform.
+    private static let schema = """
+
         CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
         CREATE TABLE IF NOT EXISTS day_progress (
           track TEXT, day INTEGER, status TEXT, updated REAL, PRIMARY KEY (track, day));
@@ -99,7 +114,20 @@ public final class ProgressStore: @unchecked Sendable {
         CREATE TABLE IF NOT EXISTS sessions (
           id INTEGER PRIMARY KEY AUTOINCREMENT, track TEXT, day INTEGER, mode TEXT,
           started REAL, ended REAL);
-        """)
+
+    """
+
+    private func migrate() throws {
+        #if canImport(SQLite3) || canImport(CSQLiteShim)
+        guard let handle else { throw StoreError.open("closed") }
+        var message: UnsafeMutablePointer<CChar>?
+        guard sqlite3_exec(handle, Self.schema, nil, nil, &message) == SQLITE_OK else {
+            let detail = message.map { String(cString: $0) } ?? errorMessage
+            sqlite3_free(message)
+            throw StoreError.statement("schema", detail)
+        }
+        sqlite3_free(message)
+        #endif
     }
 
     // MARK: - mastery
@@ -164,7 +192,7 @@ public final class ProgressStore: @unchecked Sendable {
             "SELECT topic, misses, hits FROM weak WHERE track = ? AND misses > hits ORDER BY misses - hits DESC, topic",
             track
         ) { statement in
-            #if canImport(SQLite3)
+            #if canImport(SQLite3) || canImport(CSQLiteShim)
             return WeakTopic(
                 topic: text(statement, 0),
                 misses: Int(sqlite3_column_int(statement, 1)),
@@ -184,11 +212,14 @@ public final class ProgressStore: @unchecked Sendable {
             "SELECT topic, misses, hits FROM mastery WHERE track = ? AND next_due <= ? AND hits + misses > 0 ORDER BY next_due",
             track, now.timeIntervalSince1970
         ) { statement in
-            #if canImport(SQLite3)
+            #if canImport(SQLite3) || canImport(CSQLiteShim)
+            // Column order is topic, misses, hits — so column 1 is the misses and column 2 is the
+            // hits. Reading them the other way round reported every topic backwards, telling the
+            // learner they had got something right as many times as they had missed it.
             return WeakTopic(
                 topic: text(statement, 0),
-                misses: Int(sqlite3_column_int(statement, 2)),
-                hits: Int(sqlite3_column_int(statement, 1))
+                misses: Int(sqlite3_column_int(statement, 1)),
+                hits: Int(sqlite3_column_int(statement, 2))
             )
             #else
             return WeakTopic(topic: "", misses: 0, hits: 0)
@@ -211,7 +242,7 @@ public final class ProgressStore: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return try query("SELECT section FROM coverage WHERE track = ? AND day = ? ORDER BY section", track, day) { statement in
-            #if canImport(SQLite3)
+            #if canImport(SQLite3) || canImport(CSQLiteShim)
             return text(statement, 0)
             #else
             return ""
@@ -235,7 +266,7 @@ public final class ProgressStore: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         let raw = try query("SELECT status FROM day_progress WHERE track = ? AND day = ?", track, day) { statement in
-            #if canImport(SQLite3)
+            #if canImport(SQLite3) || canImport(CSQLiteShim)
             return text(statement, 0)
             #else
             return ""
@@ -250,7 +281,7 @@ public final class ProgressStore: @unchecked Sendable {
         let days: [Int] = try query(
             "SELECT day FROM day_progress WHERE track = ? AND status = ?", track, Status.done.rawValue
         ) { statement in
-            #if canImport(SQLite3)
+            #if canImport(SQLite3) || canImport(CSQLiteShim)
             return Int(sqlite3_column_int(statement, 0))
             #else
             return 0
@@ -260,10 +291,18 @@ public final class ProgressStore: @unchecked Sendable {
     }
 
     /// The first day not yet done. Where the app opens.
+    ///
+    /// Falls back to the **last** day when every day is done, not the first: finishing the syllabus
+    /// should leave you on day 70 looking back at it, and this used to return 1 — a `min` where a
+    /// `max` was meant — so a learner who had completed all 70 days was told "Day 1 of 70" every
+    /// time they opened the app.
     public func nextDay(track: String, total: Int) throws -> Int {
+        // Guarded because `1 ... total` traps outright when total is zero, and a malformed
+        // curriculum should not be able to take the app down on launch.
+        let last = max(total, 1)
         let done = try completedDays(track: track)
-        for candidate in 1 ... total where !done.contains(candidate) { return candidate }
-        return min(max(total, 1), 1)
+        for candidate in 1 ... last where !done.contains(candidate) { return candidate }
+        return last
     }
 
     // MARK: - notes and todos
@@ -276,7 +315,7 @@ public final class ProgressStore: @unchecked Sendable {
             "INSERT INTO notes (track, day, note, created) VALUES (?, ?, ?, ?)",
             track, day, note, now.timeIntervalSince1970
         )
-        #if canImport(SQLite3)
+        #if canImport(SQLite3) || canImport(CSQLiteShim)
         return handle.map { sqlite3_last_insert_rowid($0) } ?? 0
         #else
         return 0
@@ -290,7 +329,7 @@ public final class ProgressStore: @unchecked Sendable {
             "SELECT day, note FROM notes WHERE track = ? ORDER BY created DESC, id DESC LIMIT ?",
             track, Int64(limit)
         ) { statement in
-            #if canImport(SQLite3)
+            #if canImport(SQLite3) || canImport(CSQLiteShim)
             return SessionNote(day: Int(sqlite3_column_int(statement, 0)), note: text(statement, 1))
             #else
             return SessionNote(day: 0, note: "")
@@ -312,7 +351,7 @@ public final class ProgressStore: @unchecked Sendable {
             "INSERT INTO todos (track, day, title, detail, done, created) VALUES (?, ?, ?, ?, 0, ?)",
             track, day, title, detail, now.timeIntervalSince1970
         )
-        #if canImport(SQLite3)
+        #if canImport(SQLite3) || canImport(CSQLiteShim)
         return handle.map { sqlite3_last_insert_rowid($0) } ?? 0
         #else
         return 0
@@ -325,7 +364,7 @@ public final class ProgressStore: @unchecked Sendable {
         return try query(
             "SELECT title, detail FROM todos WHERE track = ? AND done = 0 ORDER BY created", track
         ) { statement in
-            #if canImport(SQLite3)
+            #if canImport(SQLite3) || canImport(CSQLiteShim)
             return Todo(title: text(statement, 0), body: text(statement, 1), done: false)
             #else
             return Todo(title: "", body: "", done: false)
@@ -350,7 +389,7 @@ public final class ProgressStore: @unchecked Sendable {
             "INSERT INTO sessions (track, day, mode, started) VALUES (?, ?, ?, ?)",
             track, day, mode, now.timeIntervalSince1970
         )
-        #if canImport(SQLite3)
+        #if canImport(SQLite3) || canImport(CSQLiteShim)
         return handle.map { sqlite3_last_insert_rowid($0) } ?? 0
         #else
         return 0
@@ -374,7 +413,7 @@ public final class ProgressStore: @unchecked Sendable {
             """,
             track, now.addingTimeInterval(-60 * 60 * 24 * 120).timeIntervalSince1970
         ) { statement in
-            #if canImport(SQLite3)
+            #if canImport(SQLite3) || canImport(CSQLiteShim)
             return SessionSpan(start: text(statement, 0), end: text(statement, 1))
             #else
             return SessionSpan(start: "", end: "")
@@ -407,7 +446,7 @@ public final class ProgressStore: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return try query("SELECT v FROM kv WHERE k = ?", key) { statement in
-            #if canImport(SQLite3)
+            #if canImport(SQLite3) || canImport(CSQLiteShim)
             return text(statement, 0)
             #else
             return ""
@@ -421,12 +460,25 @@ public final class ProgressStore: @unchecked Sendable {
         try run(sql)
     }
 
+    /// Runs a statement for effect and ignores any rows it produces.
+    ///
+    /// Rows have to be tolerated, not just commands stepped once. `PRAGMA journal_mode=WAL` reports
+    /// the mode it settled on, so it returns SQLITE_ROW — and demanding SQLITE_DONE here made
+    /// `init` throw on every single open, which meant the store was never open at all. Nothing
+    /// showed it: every call site in the app uses `try?`, so the whole of progress tracking, notes,
+    /// todos and coverage quietly did nothing while the header kept reporting Day 1 of 70 forever.
+    /// The unit tests could not catch it because SQLite was not importable on the build machine, so
+    /// none of this code had ever run anywhere.
     private func run(_ sql: String, _ params: Any?...) throws {
         try withStatement(sql) { statement in
             try Self.bind(params, to: statement)
-            #if canImport(SQLite3)
-            guard sqlite3_step(statement) == SQLITE_DONE else {
-                throw StoreError.step(errorMessage)
+            #if canImport(SQLite3) || canImport(CSQLiteShim)
+            while true {
+                switch sqlite3_step(statement) {
+                case SQLITE_DONE: return
+                case SQLITE_ROW: continue
+                default: throw StoreError.step(errorMessage)
+                }
             }
             #endif
         }
@@ -438,7 +490,7 @@ public final class ProgressStore: @unchecked Sendable {
         map: (OpaquePointer) throws -> T
     ) throws -> [T] {
         try withStatement(sql) { statement in
-            #if canImport(SQLite3)
+            #if canImport(SQLite3) || canImport(CSQLiteShim)
             try Self.bind(params, to: statement)
             var out: [T] = []
             while true {
@@ -463,7 +515,7 @@ public final class ProgressStore: @unchecked Sendable {
     /// `SQLITE_TRANSIENT` matters here: Swift `String`s are not guaranteed to outlive the bind call,
     /// so without it SQLite would hold a pointer into freed memory.
     private static func bind(_ params: [Any?], to statement: OpaquePointer) throws {
-        #if canImport(SQLite3)
+        #if canImport(SQLite3) || canImport(CSQLiteShim)
         for (index, param) in params.enumerated() {
             let position = Int32(index + 1)
             switch param {
@@ -487,7 +539,7 @@ public final class ProgressStore: @unchecked Sendable {
     /// Written against `withStatement` rather than `query` because splatting one variadic into
     /// another is ambiguous once `query` has a trailing labelled parameter.
     private func scalarInt(_ sql: String, _ params: Any?...) throws -> Int? {
-        #if canImport(SQLite3)
+        #if canImport(SQLite3) || canImport(CSQLiteShim)
         return try withStatement(sql) { statement in
             try Self.bind(params, to: statement)
             guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
@@ -500,7 +552,7 @@ public final class ProgressStore: @unchecked Sendable {
     }
 
     private func withStatement<T>(_ sql: String, _ body: (OpaquePointer) throws -> T) throws -> T {
-        #if canImport(SQLite3)
+        #if canImport(SQLite3) || canImport(CSQLiteShim)
         guard let handle else { throw StoreError.open("closed") }
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK,
@@ -516,7 +568,7 @@ public final class ProgressStore: @unchecked Sendable {
     }
 
     private func text(_ statement: OpaquePointer, _ column: Int32) -> String {
-        #if canImport(SQLite3)
+        #if canImport(SQLite3) || canImport(CSQLiteShim)
         guard let pointer = sqlite3_column_text(statement, column) else { return "" }
         return String(cString: pointer)
         #else
@@ -525,7 +577,7 @@ public final class ProgressStore: @unchecked Sendable {
     }
 
     private var errorMessage: String {
-        #if canImport(SQLite3)
+        #if canImport(SQLite3) || canImport(CSQLiteShim)
         guard let handle else { return "no database" }
         return String(cString: sqlite3_errmsg(handle))
         #else
