@@ -31,7 +31,7 @@ export PATH="$HOME/.local/swift/usr/bin:$PATH"     # Swift 6.4.1 is not on PATH 
 
 bash tools/stage-content.sh                        # copy the curricula in
 bash tools/inject-key.sh                           # bake the provider key in
-swift test                                         # 73 tests, runs natively on Linux
+swift test                                         # 74 tests, runs natively on Linux
 
 xtool dev build                                    # -> xtool/Aurelia.app
 xtool dev build --configuration release --ipa      # -> xtool/Aurelia.ipa
