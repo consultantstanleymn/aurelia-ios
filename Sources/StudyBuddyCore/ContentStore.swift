@@ -31,17 +31,79 @@ public actor ContentStore {
     // MARK: - loading
 
     /// Where the staged curricula live inside the bundle.
+    ///
+    /// Resolved by looking rather than by assuming, because there are two layouts and the app only
+    /// ships one of them.
+    ///
+    /// The build declares the curricula as a resource of the *app* target, so they are copied into a
+    /// nested resource bundle — `Aurelia_Aurelia.bundle/Content` — rather than into the app's own
+    /// resources. Reading `Bundle.main.resourceURL/Content` therefore finds nothing at all, and the
+    /// symptom is not a crash but a tutor with no material: every track loading zero days, with no
+    /// error anywhere. The bundled name follows the package and target names, so it is searched for
+    /// rather than hard-coded.
+    private var resolvedBase: URL?
+    private var didResolveBase = false
+
+    private func baseURL() -> URL? {
+        if let rootOverride { return rootOverride }
+        if !didResolveBase {
+            didResolveBase = true
+            resolvedBase = Self.findContentRoot(in: Bundle.main.resourceURL)
+        }
+        return resolvedBase
+    }
+
     private func root(_ track: Track) -> URL? {
-        let base = rootOverride
-            ?? Bundle.main.resourceURL?.appendingPathComponent("Content", isDirectory: true)
-        return base?.appendingPathComponent(track.contentDirectory, isDirectory: true)
+        baseURL()?.appendingPathComponent(track.contentDirectory, isDirectory: true)
+    }
+
+    /// Finds the staged curricula in a bundle directory, in either layout.
+    ///
+    /// Pure enough to test: give it a directory, get back the path or nil. That matters, because the
+    /// version this replaced could only be checked by installing on a phone and reading a log, and
+    /// that is exactly how it got this far.
+    public static func findContentRoot(in container: URL?) -> URL? {
+        guard let container else { return nil }
+        let manager = FileManager.default
+
+        func directory(_ url: URL) -> Bool {
+            var isDirectory: ObjCBool = false
+            return manager.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
+        }
+
+        // Straight into the app's own resources.
+        let flat = container.appendingPathComponent("Content", isDirectory: true)
+        if directory(flat) { return flat }
+
+        // Inside a nested resource bundle. Sorted so the choice is stable when several match.
+        let items = (try? manager.contentsOfDirectory(
+            at: container, includingPropertiesForKeys: nil
+        )) ?? []
+        for item in items.sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
+        where item.pathExtension == "bundle" {
+            let nested = item.appendingPathComponent("Content", isDirectory: true)
+            if directory(nested) { return nested }
+        }
+        return nil
     }
 
     public func load() {
         guard !loaded else { return }
         loaded = true
+        // Say where it looked, or that it found nothing. A store that silently loads zero days
+        // looks exactly like a tutor with nothing to teach.
+        DiagLog.event("content.root", [
+            "path": baseURL()?.path ?? "not found",
+            "override": rootOverride != nil,
+        ])
         for track in Track.allCases {
-            metadata[track] = Self.readMetadata(track, root: root(track))
+            // Quant ships as weeks.json rather than day pages and days.json, so asking it for day
+            // metadata is asking the wrong question — and it answered by logging "noMetadata" on
+            // every single launch, which in a log that is the only source of truth reads as a
+            // fault rather than as a track that works differently.
+            metadata[track] = track.usesWeeklyLayout
+                ? nil
+                : Self.readMetadata(track, root: root(track))
             var days: [Int: LessonDay] = [:]
             for day in 1 ... track.totalUnits {
                 if let lesson = Self.readDay(track, day: day, meta: metadata[track]?[day], root: root(track)) {
@@ -302,9 +364,7 @@ public actor ContentStore {
     /// they are actually delivered. Missing ones are simply empty rather than a placeholder, so an
     /// absent file does not waste tokens telling the tutor there are no errata.
     public func trackedNote(_ track: Track, day number: Int) -> String {
-        guard let root = rootOverride ?? Bundle.main.resourceURL?
-            .appendingPathComponent("Content", isDirectory: true)
-        else { return "" }
+        guard let root = baseURL() else { return "" }
         let file = root
             .appendingPathComponent(track.contentDirectory, isDirectory: true)
             .appendingPathComponent("data/errata.md")
@@ -322,6 +382,12 @@ extension Track {
         case .quant: return "quant-checklist"
         }
     }
+
+    /// Quant is not a set of day pages. Its source is a JavaScript object literal, which
+    /// `tools/stage-content.sh` evaluates with node at staging time and writes out as a single
+    /// `weeks.json`, so it has no `days.json` and no per-day metadata to read. Said here rather
+    /// than left to be rediscovered as a missing-file warning on every launch.
+    var usesWeeklyLayout: Bool { self == .quant }
 }
 
 
