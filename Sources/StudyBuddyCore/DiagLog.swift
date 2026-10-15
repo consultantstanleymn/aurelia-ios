@@ -1,4 +1,3 @@
-#if canImport(Foundation)
 import Foundation
 
 /// Writes what the app is doing to a file I can pull off the device.
@@ -13,16 +12,20 @@ import Foundation
 /// the tutor and every network failure lands here, because a bug that only shows itself as "the
 /// button does nothing" cannot be reasoned about — it has to be observed.
 ///
+/// It lives in Core rather than the app target, and that was a mistake I corrected the hard way:
+/// with the logger in the app there was no way to see inside the HTTP transport, so a turn that
+/// hung silently had no observable cause at all. Whatever can fail has to be able to log.
+///
 /// The file is capped: appending forever would fill the device, and the interesting part is always
 /// the most recent one.
-enum DiagLog {
+public enum DiagLog {
     private static let name = "aurelia.log"
     private static let cap = 256 * 1024
     private static let lock = NSLock()
 
-    static var isEnabled: Bool { true }
+    public static var isEnabled: Bool { true }
 
-    static func write(_ message: String) {
+    public static func write(_ message: String) {
         lock.lock()
         defer { lock.unlock() }
         let line = "\(stamp())  \(message)\n"
@@ -51,7 +54,7 @@ enum DiagLog {
 
     /// Deliberately stringly-typed. This is a diagnostic sink, not an API, and making every call
     /// site construct a payload type would only get in the way of adding the next line quickly.
-    static func event(_ name: String, _ detail: [String: Any] = [:]) {
+    public static func event(_ name: String, _ detail: [String: Any] = [:]) {
         guard !detail.isEmpty else { return write("· \(name)") }
         let body = detail
             .sorted { $0.key < $1.key }
@@ -60,9 +63,9 @@ enum DiagLog {
         write("· \(name)  \(body)")
     }
 
-    static var path: String { fileURL()?.path ?? "(no container)" }
+    public static var path: String { fileURL()?.path ?? "(no container)" }
 
-    static func fileURL() -> URL? {
+    public static func fileURL() -> URL? {
         guard let documents = FileManager.default.urls(
             for: .documentDirectory, in: .userDomainMask
         ).first else { return nil }
@@ -75,4 +78,3 @@ enum DiagLog {
         return formatter.string(from: Date())
     }
 }
-#endif

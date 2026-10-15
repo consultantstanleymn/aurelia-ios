@@ -154,6 +154,8 @@ public struct URLSessionBrainTransport: BrainTransport, @unchecked Sendable {
     ) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
+                // Declared outside the do block so the catch handlers can report how far it got.
+                var chunks = 0
                 do {
                     var request = URLRequest(url: configuration.endpoint)
                     request.httpMethod = "POST"
@@ -176,9 +178,21 @@ public struct URLSessionBrainTransport: BrainTransport, @unchecked Sendable {
                     // which swift-corelibs-foundation does not implement. The delegate works
                     // identically on both platforms, and real streaming is the point: the tutor
                     // has to start speaking while the model is still writing, not after.
+                    DiagLog.event("http.sending", [
+                        "host": configuration.host,
+                        "model": configuration.model,
+                        "messages": messages.count,
+                        "systemChars": messages.first?.content.count ?? 0,
+                        "keyChars": apiKey.count,
+                    ])
                     let reader = SSEReader()
                     var buffer = ""
+                    DiagLog.event("http.streamOpened")
                     for try await chunk in reader.stream(session, request) {
+                        chunks += 1
+                        if chunks == 1 {
+                            DiagLog.event("http.firstChunk", ["bytes": chunk.count])
+                        }
                         buffer += chunk
 
                         // Server-sent events: a blank line terminates a record, `data:` carries it.
@@ -190,12 +204,16 @@ public struct URLSessionBrainTransport: BrainTransport, @unchecked Sendable {
                             }
                         }
                     }
+                    DiagLog.event("http.streamEnded", ["chunks": chunks])
                     continuation.finish()
                 } catch let error as BrainError {
+                    DiagLog.event("http.failed", ["kind": "BrainError", "chunks": chunks, "error": "\(error)"])
                     continuation.finish(throwing: error)
                 } catch is CancellationError {
+                    DiagLog.event("http.cancelled", ["chunks": chunks])
                     continuation.finish(throwing: CancellationError())
                 } catch {
+                    DiagLog.event("http.failed", ["kind": "other", "chunks": chunks, "error": "\(error)"])
                     continuation.finish(throwing: BrainError.unreachable(error.localizedDescription))
                 }
             }

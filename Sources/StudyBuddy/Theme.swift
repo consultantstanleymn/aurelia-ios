@@ -2,6 +2,7 @@
 // lets `swift test` run the core suite natively here. xtool builds it for real.
 #if canImport(SwiftUI)
 import SwiftUI
+import StudyBuddyCore
 
 /// The app's look: gold and white on near-black, with Apple's Liquid Glass over the top.
 ///

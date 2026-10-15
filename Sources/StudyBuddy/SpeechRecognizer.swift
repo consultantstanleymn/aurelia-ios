@@ -8,6 +8,7 @@ import AVFoundation
 import Foundation
 import Observation
 import Speech
+import StudyBuddyCore
 
 /// Turns speech into text, on device.
 ///

@@ -69,7 +69,10 @@ final class SSEReader: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         let alreadyDone = completed
         self.completed = true
         lock.unlock()
-        guard !alreadyDone, let continuation else { return }
+        guard !alreadyDone, let continuation else {
+            DiagLog.event("sse.completionDropped", ["reason": "no continuation yet"])
+            return
+        }
 
         if let error {
             continuation.finish(throwing: error)
@@ -83,6 +86,7 @@ final class SSEReader: NSObject, URLSessionDataDelegate, @unchecked Sendable {
             return
         }
         // The tail of a stream that did not end on a blank line still has to be parsed.
+        DiagLog.event("sse.finish", ["bytes": data?.count ?? 0])
         if let data, !data.isEmpty, let text = String(data: data, encoding: .utf8) {
             continuation.yield(text)
         }
@@ -98,7 +102,12 @@ final class SSEReader: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         lock.lock()
         let continuation = self.continuation
         lock.unlock()
-        continuation?.yield(text)
+        guard let continuation else {
+            DiagLog.event("sse.chunkDropped", ["bytes": data.count])
+            return
+        }
+        DiagLog.event("sse.chunk", ["bytes": data.count])
+        continuation.yield(text)
     }
 
     func urlSession(
@@ -111,6 +120,7 @@ final class SSEReader: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         let alreadyDone = completed
         lock.unlock()
         if let error, !alreadyDone {
+            DiagLog.event("sse.completedWithError", ["error": error.localizedDescription])
             continuation?.finish(throwing: error)
         }
     }

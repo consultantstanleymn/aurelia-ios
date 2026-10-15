@@ -1,6 +1,7 @@
 #if canImport(Security)
 import Foundation
 import Security
+import StudyBuddyCore
 
 /// The provider key, in the Keychain.
 ///
