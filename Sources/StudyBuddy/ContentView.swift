@@ -52,16 +52,11 @@ struct ContentView: View {
             DiagLog.event("app.tracks", ["count": Track.allCases.count])
             tutor.configure(brain: .deepSeek, transport: URLSessionBrainTransport())
             hasKey = !Keychain.effective().isEmpty
-            // Self-test hook. `xtool launch <bundle-id> -selftest-mic` exercises the whole
-            // permission path without anyone having to tap a button, which is the only way to
-            // find out what the recogniser is doing while the app is on a desk.
-            if ProcessInfo.processInfo.arguments.contains("-selftest-mic") {
-                DiagLog.event("selftest.begin")
-                ears.start()
-                try? await Task.sleep(nanoseconds: 8_000_000_000)
-                DiagLog.event("selftest.result", ["state": "\(ears.state)", "chars": ears.transcript.count])
-                ears.stop()
-            }
+            StartupSelfTest.runIfNeeded(
+                ears: ears,
+                tutor: tutor,
+                apiKey: Keychain.effective()
+            )
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView().onDisappear { hasKey = !Keychain.effective().isEmpty }
