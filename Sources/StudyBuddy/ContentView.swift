@@ -67,43 +67,92 @@ struct ContentView: View {
     // MARK: - header
 
     private var header: some View {
-        HStack(spacing: 12) {
-            crabMark
-            VStack(alignment: .leading, spacing: 1) {
-                Text(tutor.track.displayName)
-                    .font(Theme.body(16)).fontWeight(.semibold)
-                    .foregroundStyle(Theme.text)
-                Text("Day \(tutor.day) of \(tutor.track.totalUnits) · \(tutor.mode.displayName)")
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                crabMark
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(tutor.track.displayName)
+                        .font(Theme.body(16)).fontWeight(.semibold)
+                        .foregroundStyle(Theme.text)
+                    HStack(spacing: 6) {
+                        Text("\(tutor.track.unitName) \(tutor.day) of \(tutor.track.totalUnits)")
+                        if tutor.streakDays > 0 {
+                            Text("·").foregroundStyle(Theme.gold)
+                            Text("\(tutor.streakDays) day streak")
+                        }
+                        if tutor.coveredCount > 0 {
+                            Text("·").foregroundStyle(Theme.gold)
+                            Text("\(tutor.coveredCount) covered")
+                        }
+                    }
                     .font(Theme.label(11))
                     .foregroundStyle(Theme.textMuted)
-            }
-            Spacer(minLength: 8)
-            Button {
-                DiagLog.event("ui.settingsTapped")
-                showingSettings = true
-            } label: {
-                Image(systemName: hasKey ? "gearshape" : "key.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(hasKey ? Theme.textMuted : Theme.goldInk)
-                    .frame(width: 34, height: 34)
-                    .background(Circle().fill(hasKey ? Color.clear : Theme.goldPale))
-            }
-            .accessibilityLabel("Settings")
-            if tutor.isSpeaking || tutor.isThinking {
-                HStack(spacing: 7) {
-                    SpeakingBars(isActive: tutor.isSpeaking || tutor.isThinking)
-                    Text(tutor.isThinking ? "thinking" : "speaking")
-                        .font(Theme.label(11))
-                        .foregroundStyle(Theme.gold)
                 }
-                .padding(.horizontal, 11).padding(.vertical, 7)
-                .glass(cornerRadius: 14)
-                .transition(.opacity.combined(with: .scale(0.9)))
+                Spacer(minLength: 8)
+                if tutor.isSpeaking || tutor.isThinking {
+                    HStack(spacing: 7) {
+                        SpeakingBars(isActive: tutor.isSpeaking || tutor.isThinking)
+                        Text(tutor.isThinking ? "thinking" : "speaking")
+                            .font(Theme.label(11))
+                            .foregroundStyle(Theme.goldInk)
+                    }
+                    .padding(.horizontal, 11).padding(.vertical, 7)
+                    .glass(cornerRadius: 14)
+                    .transition(.opacity.combined(with: .scale(0.9)))
+                }
+                Button {
+                    DiagLog.event("ui.settingsTapped")
+                    showingSettings = true
+                } label: {
+                    Image(systemName: hasKey ? "gearshape" : "key.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(hasKey ? Theme.textMuted : Theme.goldInk)
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(hasKey ? Color.clear : Theme.goldPale))
+                }
+                .accessibilityLabel("Settings")
             }
+
+            // Track and day, because the content store has 238 days behind them and there was no
+            // way to reach any of it.
+            HStack(spacing: 8) {
+                ForEach(Track.allCases, id: \.rawValue) { option in
+                    Button {
+                        Task { await tutor.select(track: option) }
+                    } label: {
+                        Text(option == .aws ? "AWS" : option == .lsat ? "LSAT" : "Quant")
+                            .font(Theme.label(12))
+                            .foregroundStyle(option == tutor.track ? Theme.background : Theme.textMuted)
+                            .padding(.horizontal, 12).padding(.vertical, 6)
+                            .background {
+                                Capsule().fill(option == tutor.track ? Theme.gold : Color.clear)
+                            }
+                    }
+                    .accessibilityLabel(option.displayName)
+                }
+                Spacer(minLength: 0)
+                Button {
+                    Task { await tutor.select(day: tutor.day - 1) }
+                } label: {
+                    Image(systemName: "chevron.left").font(.system(size: 12, weight: .bold))
+                }
+                .disabled(tutor.day <= 1)
+                Text("\(tutor.day)")
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Theme.text)
+                    .frame(minWidth: 26)
+                Button {
+                    Task { await tutor.select(day: tutor.day + 1) }
+                } label: {
+                    Image(systemName: "chevron.right").font(.system(size: 12, weight: .bold))
+                }
+                .disabled(tutor.day >= tutor.track.totalUnits)
+            }
+            .foregroundStyle(Theme.textMuted)
         }
         .padding(.horizontal, 18)
         .padding(.top, 8)
-        .padding(.bottom, 12)
+        .padding(.bottom, 10)
     }
 
     private var crabMark: some View {
