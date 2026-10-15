@@ -121,11 +121,12 @@ public final class AudioQueueSink: ChatterboxVoice.AudioSink, @unchecked Sendabl
     }
 
     private func configureSession() {
-        // .playback so audio continues with the ringer switched to silent, which is how someone
-        // actually uses a study app. .duckOthers so a podcast or music does not fight the tutor.
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
-        try? session.setActive(true)
+        // Deliberately not configuring the category here. The recogniser needs .playAndRecord
+        // while it listens, and a voice engine that reconfigures the shared AVAudioSession on init
+        // will pull the category out from under it — which is exactly the "Session activation
+        // failed" this app was hitting. .playAndRecord with .defaultToSpeaker plays the tutor
+        // fine, so there is nothing to gain by fighting over it.
+        DiagLog.event("voice.sessionLeftToRecogniser")
     }
 
     public func play(_ audio: Data) {

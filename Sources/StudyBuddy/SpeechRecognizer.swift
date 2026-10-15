@@ -124,23 +124,51 @@ final class SpeechRecognizer {
         // raises an Objective-C exception on an invalid format rather than throwing a Swift
         // error, which is a hard crash with nothing in the log. That ordering is the whole bug.
         let session = AVAudioSession.sharedInstance()
+
+        // The session refused to activate with the option set that looked right, and the log said
+        // so plainly — "Session activation failed" — after both permissions had already been
+        // granted. Rather than pick one configuration and hope, this walks down a ladder and
+        // takes the first that actually activates, because which options a session will accept
+        // depends on what the system is already doing with audio and is not knowable in advance.
+        //
         // .playAndRecord rather than .record: the tutor speaks through AVSpeechSynthesizer, and a
-        // record-only category leaves the device unable to play its reply at all. .measurement
-        // mode is the right processing for a tutor that must hear a quiet spoken answer.
-        do {
-            try session.setCategory(
-                .playAndRecord,
-                mode: .measurement,
-                options: [.defaultToSpeaker, .allowBluetooth, .duckOthers]
-            )
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
-        } catch {
-            DiagLog.event("audio.sessionFailed", ["error": error.localizedDescription])
-            state = .unavailable("Could not open the microphone: \(error.localizedDescription)")
+        // record-only category leaves the device unable to play its own reply.
+        var attempt = 0
+        var activated = false
+        var lastError = "unknown"
+
+        let ladder: [(AVAudioSession.Category, AVAudioSession.Mode, AVAudioSession.CategoryOptions)] = [
+            (.playAndRecord, .measurement, [.defaultToSpeaker, .allowBluetooth, .duckOthers]),
+            (.playAndRecord, .measurement, [.defaultToSpeaker, .allowBluetooth]),
+            (.playAndRecord, .default,     [.defaultToSpeaker]),
+            (.playAndRecord, .default,     []),
+            (.playAndRecord, .voiceChat,   [.defaultToSpeaker, .allowBluetooth]),
+        ]
+
+        for (category, mode, options) in ladder {
+            attempt += 1
+            // Deactivating first matters: a session left active under a previous category refuses
+            // to change category, and the symptom of that is a failed activation with no clue.
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            do {
+                try session.setCategory(category, mode: mode, options: options)
+                DiagLog.event("audio.category", ["try": attempt, "category": "\(category.rawValue)", "mode": "\(mode.rawValue)", "opts": options.rawValue])
+                try session.setActive(true)
+                DiagLog.event("audio.activated", ["try": attempt, "opts": options.rawValue])
+                activated = true
+                break
+            } catch {
+                lastError = error.localizedDescription
+                DiagLog.event("audio.attemptFailed", ["try": attempt, "opts": options.rawValue, "error": lastError])
+            }
+        }
+
+        guard activated else {
+            DiagLog.event("audio.allAttemptsFailed", ["tries": attempt, "last": lastError])
+            state = .unavailable("Could not open the microphone: \(lastError)")
             return
         }
 
-        DiagLog.event("audio.configuring")
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
