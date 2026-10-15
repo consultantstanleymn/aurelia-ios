@@ -13,12 +13,25 @@ struct ContentView: View {
     /// Drives a single warning in the header until the key is added. Hidden once it is set, and
     /// never a modal, because the tutor is otherwise ready to go.
     @State private var hasKey = false
-    @State private var draft = ""
+    /// The composer's text and the rules for putting speech into it. The rules are in Core so they
+    /// are tested; this only binds them to a text field.
+    @State private var composer = ComposerBuffer()
     @State private var showingSettings = false
     @FocusState private var composerFocused: Bool
 
     private var canSend: Bool {
-        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !tutor.isThinking
+        // Sending waits until the recogniser has stopped. The composer is already showing the live
+        // transcript while it listens, so nothing is hidden by waiting — and stopping on send
+        // instead would let the settled text arrive a moment after the send and pre-fill the
+        // composer with the same words, one tap away from being sent twice.
+        composer.isSendable && !tutor.isThinking && ears.state != .listening
+    }
+
+    private var draft: Binding<String> {
+        Binding(
+            get: { composer.draft },
+            set: { composer.userTyped($0) }
+        )
     }
 
     var body: some View {
@@ -40,7 +53,7 @@ struct ContentView: View {
                 micNotice
                 board
                 captions
-                composer
+                composerBar
             }
         }
         .preferredColorScheme(.light)
@@ -58,6 +71,28 @@ struct ContentView: View {
                 tutor: tutor,
                 apiKey: Keychain.effective()
             )
+        }
+        // The recogniser and the composer are separate pieces of state, and nothing used to join
+        // them: the microphone worked, the log filled with final transcripts, and the text field
+        // stayed empty. These three lines are the whole join.
+        .onChange(of: ears.transcript) { _, text in
+            composer.heard(text)
+        }
+        .onChange(of: ears.finalText) { _, text in
+            composer.settled(text)
+        }
+        .onChange(of: ears.state) { _, state in
+            switch state {
+            case .listening:
+                composer.beginListening()
+            case .idle:
+                // Stopping is how a turn ends: the settled text stays put, editable, until it is
+                // sent. Nothing is auto-sent, because recognition gets the technical terms wrong
+                // and the correction is the point.
+                composer.settled(ears.finalText)
+            case .unavailable:
+                break
+            }
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView().onDisappear { hasKey = !Keychain.effective().isEmpty }
@@ -247,7 +282,7 @@ struct ContentView: View {
 
     // MARK: - composer
 
-    private var composer: some View {
+    private var composerBar: some View {
         HStack(alignment: .bottom, spacing: 10) {
             Button {
                 DiagLog.event("ui.micTapped")
@@ -271,21 +306,35 @@ struct ContentView: View {
             }
             .accessibilityLabel(ears.state == .listening ? "Stop listening" : "Talk to Aurelia")
 
-            TextField("Tap the mic or type…", text: $draft, axis: .vertical)
+            TextField(
+                ears.state == .listening ? "Listening…" : "Tap the mic or type…",
+                text: draft,
+                axis: .vertical
+            )
                 .font(Theme.body())
                 .foregroundStyle(Theme.text)
                 .lineLimit(1 ... 5)
                 .focused($composerFocused)
+                // Read-only while listening. It is being written many times a second by the
+                // recogniser, and a field that fights the typist is worse than one that waits.
+                // Editable the moment it stops, which is where correcting a misheard term happens.
+                .disabled(ears.state == .listening)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 11)
                 .background {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(Color.white.opacity(0.06))
+                        .fill(Color.white.opacity(ears.state == .listening ? 0.10 : 0.06))
                 }
+                .overlay {
+                    // The field itself says the app is hearing something, so an empty composer is
+                    // never ambiguous: either it is waiting for you, or it is listening.
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(ears.state == .listening ? Theme.gold.opacity(0.5) : .clear, lineWidth: 1)
+                }
+                .animation(.easeOut(duration: 0.18), value: ears.state == .listening)
 
             Button {
-                let text = draft
-                draft = ""
+                let text = composer.takeForSending()
                 DiagLog.event("ui.send", ["chars": text.count])
                 Task { await tutor.send(text, apiKey: Keychain.effective()) }
             } label: {
@@ -299,7 +348,7 @@ struct ContentView: View {
             .overlay(alignment: .bottom) {
                 // Nudge in place rather than blocking the send, so the reason is visible without
                 // a modal the first time it happens.
-                if !hasKey && !draft.isEmpty {
+                if !hasKey && composer.isSendable {
                     Text("Add a key")
                         .font(Theme.label(10))
                         .foregroundStyle(Theme.goldInk)
