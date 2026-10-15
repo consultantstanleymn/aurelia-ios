@@ -5,7 +5,7 @@ xtool/
 *.app/
 
 # Staged curriculum content. These are cloned from the sibling curriculum repositories and are a
-# build input, not source — see scripts/stage-content.sh.
+# build input, not source — see tools/stage-content.sh.
 Sources/StudyBuddy/Resources/Content/*
 !Sources/StudyBuddy/Resources/Content/.keep
 

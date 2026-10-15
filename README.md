@@ -31,7 +31,7 @@ export PATH="$HOME/.local/swift/usr/bin:$PATH"     # Swift 6.4.1 is not on PATH 
 
 bash tools/stage-content.sh                        # copy the curricula in
 bash tools/inject-key.sh                           # bake the provider key in
-swift test                                         # 74 tests, runs natively on Linux
+swift test                                         # 145 tests, runs natively on Linux
 
 xtool dev build                                    # -> xtool/Aurelia.app
 xtool dev build --configuration release --ipa      # -> xtool/Aurelia.ipa
@@ -40,6 +40,11 @@ xtool install xtool/Aurelia.ipa
 
 Requires Swift 6.4.1, [xtool](https://github.com/xtool-org/xtool) 1.22.2, and a Darwin SDK built
 from Xcode 27 with `xtool sdk install --slim`.
+
+`swift test` also needs `sqlite-devel` (`sudo dnf install sqlite-devel`). Without it the progress
+store compiles to nothing on Linux — it sits behind `canImport(SQLite3)`, and Linux ships the
+headers without a Clang module map for them — so the suite would pass while every query in it went
+unrun. The `CSQLiteShim` target re-exports the system header to put that right.
 
 ## The brain
 
@@ -67,6 +72,7 @@ which reads as disappointment.
 ## Layout
 
 ```
+Sources/CSQLiteShim/           re-exports the system SQLite header, so the store builds on Linux
 Sources/StudyBuddyCore/     Foundation only. No UIKit, no SwiftUI, so `swift test` runs on Linux.
   TagParser.swift           the speech/side-effect split, and where naive ports break
   BrainClient.swift         streaming chat completions
@@ -76,6 +82,8 @@ Sources/StudyBuddyCore/     Foundation only. No UIKit, no SwiftUI, so `swift tes
   MiniHTML.swift            just enough HTML reading for fixed generated pages
   ProgressStore.swift        SQLite, a direct port of the Python schema
   ProgressMath.swift        the ladder and streak, extracted so they are testable
+  ReminderSchedule.swift    when a reminder next fires, and why it is in here
+  ComposerBuffer.swift      how speech gets into the composer
   BoardShape.swift          board kinds parsed into shapes
   ChatterboxVoice.swift     the HTTP voice engine
 Sources/StudyBuddy/         the app. Builds only through xtool.
@@ -88,6 +96,17 @@ tools/
   stage-content.sh          curricula in
   inject-key.sh             the key in
 ```
+
+## Where the logic lives, and why it is where it is
+
+The app is the only part that cannot be tested from this machine: `xtool launch` does not start apps
+on the phone, so a SwiftUI view is only ever verified by a human looking at a screen. Anything with
+a decision in it therefore lives in Core, where `swift test` reaches it, and the view above it stays
+thin. That is why speech merging is a type with tests rather than a line in `ContentView`, and why
+"when does this reminder next go off" is in Core rather than next to `UNUserNotificationCenter`.
+
+It is also why the test count is 145 rather than a handful. Every one of them runs on Linux in
+seconds.
 
 ## Two things worth knowing if you change this
 
@@ -102,6 +121,24 @@ already doing with audio.
 it — it reports 0 Hz and 0 channels before then, and `installTap` raises on that rather than
 returning an error.
 
+**A full stop only ends a sentence when whitespace follows it.** Otherwise the tutor says
+`10.0.0.0/8` as eight separate fragments and `v1.0.44` as four, which is exactly the material this
+app exists to teach. The rule was in this file's documentation long before it was in the code.
+
+## Checking what a build actually contains
+
+The build is green whether or not the feature is in it, so the payload gets checked directly:
+
+```sh
+unzip -q xtool/Aurelia.ipa -d /tmp/ipa
+strings -a /tmp/ipa/Payload/Aurelia.app/Aurelia | grep -c 'SFSpeechRecognizer'
+```
+
+One trap worth knowing: **in a release build, `strings` cannot see string literals of 15 bytes or
+fewer.** Swift stores those inline in the instruction stream, so `grep -c 'turn.begin'` returns 0 on
+a release binary and 1 on a debug one, with identical behaviour. The code is there either way. Use
+a longer literal — a sentence of copy rather than a log key — when confirming what shipped.
+
 ## Diagnostics
 
 `xtool launch` cannot start apps on this device, and Xcode 27 ships no Developer Disk Image, so
@@ -109,13 +146,23 @@ there are no device screenshots and `NSLog` goes nowhere. The app therefore appe
 `Documents/aurelia.log`, which is pulled over USB:
 
 ```sh
-mkdir -p /tmp/aurelia && ifuse -u <udid> --documents <bundle-id> /tmp/aurelia
+mkdir -p /tmp/aurelia
+idevice_id -l                                    # find the UDID
+ifuse -u <udid> --documents <bundle-id> /tmp/aurelia
 cat /tmp/aurelia/aurelia.log
+fusermount -u /tmp/aurelia
 ```
 
+`idevice_id -l` prints the UDID, and the bundle id is **not** the one in `xtool.yml`. Free-account
+signing prefixes it on the device: `ch.stanley.aurelia` installs as
+`XTL-V63Z8847B5.ch.stanley.aurelia`, and `ifuse` fails with `InstallationLookupFailed` if given the
+unprefixed one.
+
 It logs every permission decision, audio-format and engine state change, partial transcript, tutor
-event, and each stage of the HTTP request. This is not decoration: the turn that hung silently for
-fifteen minutes was one log line away from being found.
+event, and each stage of the HTTP request. Progress writes are logged on failure too, rather than
+swallowed — a bare `try?` in the app is how the store managed to be broken and look perfectly
+healthy. This is not decoration: the turn that hung silently for fifteen minutes was one log line
+away from being found.
 
 ## Credits
 
