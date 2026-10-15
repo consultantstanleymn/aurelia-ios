@@ -17,6 +17,9 @@ struct SettingsView: View {
     @State private var chatterboxURL = ""
     @State private var status: Status = .idle
     @State private var statusText = ""
+    /// Held here rather than in ContentView because reminders are a per-track setting and this is
+    /// the only screen that edits them.
+    @State private var reminders = Reminders()
 
     enum Status: Equatable { case idle, testing, ok, failed }
 
@@ -86,6 +89,8 @@ struct SettingsView: View {
                     Text("Voice")
                 }
 
+                reminderSection
+
                 Section {
                     Button {
                         Task { await testConnection() }
@@ -122,8 +127,106 @@ struct SettingsView: View {
                 DiagLog.event("settings.appear")
                 savedKey = Keychain.read() ?? ""
                 chatterboxURL = UserDefaults.standard.string(forKey: "chatterboxURL") ?? ""
+                // Permission may have been granted in an earlier session, so the stored state is
+                // not trustworthy on its own — ask the system before showing the toggles.
+                Task { await reminders.refreshAuthorisation() }
             }
         }
+    }
+
+    // MARK: - reminders
+
+    /// The Python tutor's reminder schedule, on the phone.
+    ///
+    /// Permission first and everything else after it: `UNUserNotificationCenter` drops requests
+    /// made while unauthorised, silently, which leaves the learner with no reminders and nothing
+    /// telling them why. So the toggles only appear once there is permission to honour them.
+    @ViewBuilder
+    private var reminderSection: some View {
+        Section {
+            switch reminders.authorisation {
+            case .notDetermined:
+                Button {
+                    Task { await reminders.requestAuthorisation() }
+                } label: {
+                    Label("Turn on reminders", systemImage: "bell.badge")
+                }
+            case .denied:
+                Label("Reminders are off for Aurelia in iOS Settings.", systemImage: "bell.slash")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.textMuted)
+            case .authorized, .provisional, .ephemeral:
+                ForEach(reminders.entries) { entry in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle(isOn: Binding(
+                            get: { entry.enabled },
+                            set: { enabled in
+                                Task { await reminders.setEnabled(enabled, for: entry.id) }
+                            }
+                        )) {
+                            Text(entry.track.displayName)
+                        }
+                        // When it next goes off, not what it is set to. A schedule the learner
+                        // cannot picture is a schedule they stop trusting.
+                        if entry.enabled {
+                            HStack {
+                                Text(nextFire(for: entry))
+                                    .font(.footnote)
+                                    .foregroundStyle(Theme.textMuted)
+                                Spacer()
+                                DatePicker(
+                                    "",
+                                    selection: Binding(
+                                        get: { date(for: entry.time) },
+                                        set: { newValue in
+                                            var updated = entry
+                                            updated.time = Self.format(newValue)
+                                            Task { await reminders.update(updated) }
+                                        }
+                                    ),
+                                    displayedComponents: .hourAndMinute
+                                )
+                                .labelsHidden()
+                            }
+                        }
+                    }
+                }
+            @unknown default:
+                Text("Notification state is not one this build knows about.")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.textMuted)
+            }
+        } header: {
+            Text("Reminders")
+        } footer: {
+            Text("Weekdays only, at the times the desktop tutor used. The next reminder is shown so you can see it is really booked.")
+        }
+    }
+
+    private func nextFire(for entry: Reminders.Entry) -> String {
+        guard let text = ReminderSchedule.describe(
+            time: entry.time,
+            weekdays: entry.days,
+            now: Date()
+        ) else {
+            return "No days selected"
+        }
+        return "Next: \(text)"
+    }
+
+    /// "HH:mm" back into a Date for the picker, anchored to today because only the time is used.
+    private func date(for text: String) -> Date {
+        let (hour, minute) = ReminderSchedule.time(text)
+        return Calendar.current.date(
+            bySettingHour: hour, minute: minute, second: 0, of: Date()
+        ) ?? Date()
+    }
+
+    private static func format(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
     }
 
     // MARK: - actions
