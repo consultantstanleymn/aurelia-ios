@@ -46,6 +46,7 @@ struct ContentView: View {
         .preferredColorScheme(.light)
         .task {
             DiagLog.event("app.task")
+            await tutor.prepare()
             DiagLog.event("app.bundle", ["id": Bundle.main.bundleIdentifier ?? "nil"])
             DiagLog.event("app.logPath", ["path": DiagLog.path])
             DiagLog.event("app.hasKey", ["key": !Keychain.effective().isEmpty])
@@ -141,23 +142,10 @@ struct ContentView: View {
 
     @ViewBuilder
     private var board: some View {
-        if let item = tutor.board {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(item.title.isEmpty ? item.kind.capitalized : item.title)
-                    .font(Theme.label(11))
-                    .foregroundStyle(Theme.gold)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    Text(item.body)
-                        .font(.system(.subheadline, design: .monospaced))
-                        .foregroundStyle(Theme.text)
-                        .lineSpacing(4)
-                }
+        if let shape = tutor.board {
+            BoardView(shape: shape, focus: tutor.boardFocus) {
+                tutor.clearBoard()
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .glass(cornerRadius: 20, prominent: true)
             .padding(.horizontal, 14)
             .padding(.bottom, 12)
             .transition(.move(edge: .top).combined(with: .opacity))

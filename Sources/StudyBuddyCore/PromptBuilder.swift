@@ -96,7 +96,7 @@ public struct Todo: Equatable, Sendable {
 
 
 /// The three curricula. Days and unit names match the Python `content.TRACKS`.
-public enum Track: String, CaseIterable, Sendable {
+public enum Track: String, CaseIterable, Codable, Sendable {
     case aws, lsat, quant
 
     public var displayName: String {

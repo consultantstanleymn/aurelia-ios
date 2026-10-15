@@ -239,6 +239,22 @@ public actor ContentStore {
         load()
         return trapLibraryText
     }
+
+    /// A correction note for the day, when the curriculum ships one.
+    ///
+    /// The prompt puts corrections above the lesson and says they override it, which only works if
+    /// they are actually delivered. Missing ones are simply empty rather than a placeholder, so an
+    /// absent file does not waste tokens telling the tutor there are no errata.
+    public func trackedNote(_ track: Track, day number: Int) -> String {
+        guard let root = rootOverride ?? Bundle.main.resourceURL?
+            .appendingPathComponent("Content", isDirectory: true)
+        else { return "" }
+        let file = root
+            .appendingPathComponent(track.contentDirectory, isDirectory: true)
+            .appendingPathComponent("data/errata.md")
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return "" }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 extension Track {
