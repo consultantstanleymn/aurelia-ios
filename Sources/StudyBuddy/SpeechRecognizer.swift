@@ -49,6 +49,7 @@ final class SpeechRecognizer {
     }
 
     func toggle() {
+        DiagLog.event("mic.toggle", ["state": "\(state)"])
         switch state {
         case .listening: stop()
         case .idle: start()
@@ -57,13 +58,13 @@ final class SpeechRecognizer {
     }
 
     func start() {
-        NSLog("aurelia: mic start requested")
+        DiagLog.event("mic.start", ["state": "\(state)"])
         guard let recognizer, recognizer.isAvailable else {
-            NSLog("aurelia: recognizer unavailable (nil or !isAvailable)")
+            DiagLog.event("mic.recognizerUnavailable", ["nil": recognizer == nil])
             state = .unavailable("Speech recognition is not available on this device.")
             return
         }
-        NSLog("aurelia: recognizer ok, onDevice=\(recognizer.supportsOnDeviceRecognition)")
+        DiagLog.event("mic.recognizerOK", ["onDevice": recognizer.supportsOnDeviceRecognition, "available": recognizer.isAvailable])
 
         // Two permissions, not one. SFSpeechRecognizer only asks about speech recognition;
         // the microphone is a separate grant, and asking for one does not ask for the other.
@@ -72,18 +73,18 @@ final class SpeechRecognizer {
         Task { @MainActor in
             let speechOK = await requestSpeechAuthorization()
             guard speechOK else {
-                NSLog("aurelia: speech authorization denied")
+                DiagLog.event("mic.speechDenied")
                 self.state = .unavailable("Speech recognition was declined. Enable it in Settings.")
                 return
             }
-            NSLog("aurelia: speech authorized, asking for microphone")
+            DiagLog.event("mic.speechOK.askingMic")
             let micOK = await requestMicrophoneAuthorization()
             guard micOK else {
-                NSLog("aurelia: microphone authorization denied")
+                DiagLog.event("mic.micDenied")
                 self.state = .unavailable("The microphone was declined. Enable it in Settings.")
                 return
             }
-            NSLog("aurelia: microphone authorized, beginning")
+            DiagLog.event("mic.bothOK.begin")
             self.beginListening(recognizer: recognizer)
         }
     }
@@ -91,7 +92,7 @@ final class SpeechRecognizer {
     private func requestSpeechAuthorization() async -> Bool {
         await withCheckedContinuation { continuation in
             SFSpeechRecognizer.requestAuthorization { status in
-                NSLog("aurelia: speech status=\(status.rawValue)")
+                DiagLog.event("perm.speechStatus", ["raw": status.rawValue])
                 continuation.resume(returning: status == .authorized)
             }
         }
@@ -101,14 +102,14 @@ final class SpeechRecognizer {
         if #available(iOS 17.0, *) {
             return await withCheckedContinuation { continuation in
                 AVAudioApplication.requestRecordPermission { granted in
-                    NSLog("aurelia: mic status granted=\(granted)")
+                    DiagLog.event("perm.micStatus", ["granted": granted])
                     continuation.resume(returning: granted)
                 }
             }
         }
         return await withCheckedContinuation { continuation in
             AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                NSLog("aurelia: mic status granted=\(granted)")
+                DiagLog.event("perm.micStatus", ["granted": granted])
                 continuation.resume(returning: granted)
             }
         }
@@ -134,11 +135,12 @@ final class SpeechRecognizer {
             )
             try session.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
+            DiagLog.event("audio.sessionFailed", ["error": error.localizedDescription])
             state = .unavailable("Could not open the microphone: \(error.localizedDescription)")
             return
         }
 
-        NSLog("aurelia: session configured, reading input format")
+        DiagLog.event("audio.configuring")
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
@@ -149,13 +151,14 @@ final class SpeechRecognizer {
 
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
-        NSLog("aurelia: format sampleRate=\(format.sampleRate) channels=\(format.channelCount)")
+        DiagLog.event("audio.format", ["sampleRate": Int(format.sampleRate), "channels": format.channelCount])
         // installTap raises rather than throws on a degenerate format, so it has to be checked
         // before it is called rather than caught.
         guard format.sampleRate > 0, format.channelCount > 0 else {
             request.endAudio()
             self.request = nil
             try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            DiagLog.event("audio.degenerateFormat", ["sampleRate": Int(format.sampleRate), "channels": format.channelCount])
             state = .unavailable("No usable audio input. Close any other app that may be using the mic.")
             return
         }
@@ -164,29 +167,35 @@ final class SpeechRecognizer {
             request.append(buffer)
         }
         isTapInstalled = true
-        NSLog("aurelia: tap installed")
+        DiagLog.event("audio.tapInstalled")
 
         engine.prepare()
         do {
             try engine.start()
         } catch {
             stop()
+            DiagLog.event("audio.engineStartFailed", ["error": error.localizedDescription])
             state = .unavailable("Could not start the microphone: \(error.localizedDescription)")
             return
         }
 
-        NSLog("aurelia: engine started, state=listening")
+        DiagLog.event("audio.engineRunning")
         state = .listening
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             Task { @MainActor in
                 guard let self else { return }
                 if let result {
+                    DiagLog.event("stt.partial", ["chars": result.bestTranscription.formattedString.count, "final": result.isFinal])
                     self.transcript = result.bestTranscription.formattedString
                     if result.isFinal {
                         self.finalText = self.transcript
                     }
                 }
+                if let error {
+                    DiagLog.event("stt.error", ["error": error.localizedDescription])
+                }
                 if error != nil || (result?.isFinal ?? false) {
+                    DiagLog.event("stt.finished")
                     self.stop()
                 }
             }
@@ -198,6 +207,7 @@ final class SpeechRecognizer {
     /// The audio engine must be torn down or the next start throws, which is the single most
     /// common way a speech recogniser gets stuck after two uses.
     func stop() {
+        DiagLog.event("mic.stop", ["running": engine.isRunning, "tap": isTapInstalled])
         if engine.isRunning { engine.stop() }
         if isTapInstalled {
             engine.inputNode.removeTap(onBus: 0)

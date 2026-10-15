@@ -48,6 +48,7 @@ final class TutorController {
 
     /// Rebuilds the session when the brain or the track changes. Cheaper than a turn is lost.
     func configure(brain: BrainConfiguration, transport: any BrainTransport) {
+        DiagLog.event("brain.configured", ["provider": brain.provider, "model": brain.model, "host": brain.host])
         session = TutorSession(
             configuration: brain,
             transport: transport,
@@ -69,6 +70,7 @@ final class TutorController {
     // MARK: - the turn
 
     func send(_ said: String, apiKey: String) async {
+        DiagLog.event("turn.begin", ["chars": said.count, "key": !apiKey.isEmpty, "thinking": isThinking])
         guard let session, !isThinking else { return }
         let trimmed = said.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -78,11 +80,15 @@ final class TutorController {
         lastError = nil
 
         do {
+            var spoken = ""
             for try await event in await session.send(trimmed, apiKey: apiKey, context: context()) {
+                if case let .speech(text) = event { spoken += text }
                 handle(event)
             }
+            DiagLog.event("turn.done", ["spokenChars": spoken.count])
             finishTurn()
         } catch {
+            DiagLog.event("turn.failed", ["error": "\(error)", "desc": (error as? LocalizedError)?.errorDescription ?? "?"])
             lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             captions.append(Caption(who: .system, text: lastError ?? "Something went wrong."))
             isThinking = false
@@ -102,6 +108,7 @@ final class TutorController {
             for sentence in ready { enqueue(sentence) }
 
         case let .board(item):
+            DiagLog.event("evt.board", ["title": item.title, "kind": item.kind, "chars": item.body.count])
             board = item
         case let .note(text):
             notes.append(SessionNote(day: day, note: text))
@@ -147,6 +154,7 @@ final class TutorController {
 
     /// Cuts the tutor off. Balking mid-sentence is normal, not exceptional.
     func interrupt() {
+        DiagLog.event("turn.interrupt")
         voice.stop()
         turn?.cancel()
         turn = nil

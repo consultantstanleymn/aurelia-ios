@@ -119,6 +119,7 @@ struct SettingsView: View {
                 }
             }
             .onAppear {
+                DiagLog.event("settings.appear")
                 savedKey = Keychain.read() ?? ""
                 chatterboxURL = UserDefaults.standard.string(forKey: "chatterboxURL") ?? ""
             }
@@ -128,6 +129,7 @@ struct SettingsView: View {
     // MARK: - actions
 
     private func save() {
+        DiagLog.event("settings.save", ["chars": draftKey.count])
         let key = draftKey.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
             try Keychain.save(key)
@@ -142,6 +144,7 @@ struct SettingsView: View {
     }
 
     private func clear() {
+        DiagLog.event("settings.clearKey")
         Keychain.clear()
         savedKey = ""
         status = .idle
@@ -151,6 +154,7 @@ struct SettingsView: View {
     /// Sends one short turn so "it works" means the model actually answered, not just that the
     /// socket opened.
     private func testConnection() async {
+        DiagLog.event("settings.testConnection", ["provider": provider.provider])
         status = .testing
         statusText = ""
         let session = TutorSession(
@@ -167,9 +171,11 @@ struct SettingsView: View {
             ) {
                 if case let .speech(text) = event { reply += text }
             }
+            DiagLog.event("settings.testOK", ["chars": reply.count])
             status = .ok
             statusText = reply.isEmpty ? "Connected, but the model said nothing." : reply
         } catch {
+            DiagLog.event("settings.testFailed", ["error": "\(error)"])
             status = .failed
             statusText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }

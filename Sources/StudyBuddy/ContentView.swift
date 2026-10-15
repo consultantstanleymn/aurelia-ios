@@ -45,16 +45,21 @@ struct ContentView: View {
         }
         .preferredColorScheme(.light)
         .task {
+            DiagLog.event("app.task")
+            DiagLog.event("app.bundle", ["id": Bundle.main.bundleIdentifier ?? "nil"])
+            DiagLog.event("app.logPath", ["path": DiagLog.path])
+            DiagLog.event("app.hasKey", ["key": !Keychain.effective().isEmpty])
+            DiagLog.event("app.tracks", ["count": Track.allCases.count])
             tutor.configure(brain: .deepSeek, transport: URLSessionBrainTransport())
             hasKey = !Keychain.effective().isEmpty
             // Self-test hook. `xtool launch <bundle-id> -selftest-mic` exercises the whole
             // permission path without anyone having to tap a button, which is the only way to
             // find out what the recogniser is doing while the app is on a desk.
             if ProcessInfo.processInfo.arguments.contains("-selftest-mic") {
-                NSLog("aurelia: selftest-mic launch argument seen")
+                DiagLog.event("selftest.begin")
                 ears.start()
-                try? await Task.sleep(nanoseconds: 6_000_000_000)
-                NSLog("aurelia: selftest transcript=\(ears.transcript.prefix(80))")
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                DiagLog.event("selftest.result", ["state": "\(ears.state)", "chars": ears.transcript.count])
                 ears.stop()
             }
         }
@@ -77,7 +82,10 @@ struct ContentView: View {
                     .foregroundStyle(Theme.textMuted)
             }
             Spacer(minLength: 8)
-            Button { showingSettings = true } label: {
+            Button {
+                DiagLog.event("ui.settingsTapped")
+                showingSettings = true
+            } label: {
                 Image(systemName: hasKey ? "gearshape" : "key.fill")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(hasKey ? Theme.textMuted : Theme.goldInk)
@@ -210,6 +218,7 @@ struct ContentView: View {
     private var composer: some View {
         HStack(alignment: .bottom, spacing: 10) {
             Button {
+                DiagLog.event("ui.micTapped")
                 ears.toggle()
             } label: {
                 Image(systemName: ears.state == .listening ? "waveform" : "mic.fill")
@@ -245,6 +254,7 @@ struct ContentView: View {
             Button {
                 let text = draft
                 draft = ""
+                DiagLog.event("ui.send", ["chars": text.count])
                 Task { await tutor.send(text, apiKey: Keychain.effective()) }
             } label: {
                 Image(systemName: tutor.isThinking ? "ellipsis" : "arrow.up")

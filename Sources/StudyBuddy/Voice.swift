@@ -20,10 +20,13 @@ public final class SystemVoice: NSObject, SpeechEngine, @unchecked Sendable {
     /// A voice that is not installed still "works" — it silently falls back to a robotic one, so
     /// asking for quality is the only way to notice.
     public static func bestVoice(for language: String = "en-US") -> AVSpeechSynthesisVoice? {
+        DiagLog.event("voice.bestVoice", ["lang": language])
         // speechVoices() returns only voices installed on the device, so a premium entry here is
         // one that will really be used rather than silently falling back to something robotic.
         let installed = AVSpeechSynthesisVoice.speechVoices().filter { $0.language == language }
-        return installed.max { $0.quality.rawValue < $1.quality.rawValue }
+        let best = installed.max { $0.quality.rawValue < $1.quality.rawValue }
+        DiagLog.event("voice.resolved", ["count": installed.count, "name": best?.name ?? "none", "quality": Int(best?.quality.rawValue ?? -1)])
+        return best
     }
 
     /// The premium voices this device actually has, so Settings can list them by name.
@@ -37,6 +40,7 @@ public final class SystemVoice: NSObject, SpeechEngine, @unchecked Sendable {
     }
 
     public func speak(_ text: String, completion: @escaping @Sendable () -> Void) {
+        DiagLog.event("voice.speak", ["chars": text.count, "engine": "system"])
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             completion()
             return
@@ -62,6 +66,7 @@ public final class SystemVoice: NSObject, SpeechEngine, @unchecked Sendable {
     }
 
     public func stop() {
+        DiagLog.event("voice.stop")
         synthesizer.stopSpeaking(at: .immediate)
         lock.lock()
         let pending = completion

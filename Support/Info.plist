@@ -16,6 +16,13 @@
 	<string>Aurelia listens so you can talk to your tutor instead of typing.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Your spoken answers are transcribed on device to be sent to the tutor.</string>
+	<!-- So the diagnostic log can be pulled off the device with ifuse. Without this key iOS
+	     refuses to expose Documents to a host, and since neither the debugger nor a screenshot
+	     works here, the file is the only way to see what the app is doing. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>UIUserInterfaceStyle</key>
 	<string>Light</string>
 </dict>
