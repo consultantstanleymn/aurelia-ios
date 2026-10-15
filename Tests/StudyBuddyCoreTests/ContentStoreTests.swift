@@ -40,6 +40,27 @@ final class ContentStoreTests: XCTestCase {
         }
     }
 
+    /// Quant's weeks come from a JSON file the staging script derives from a JavaScript literal,
+    /// not from day pages. That path has its own failure mode, so it is checked on its own terms:
+    /// a non-zero week whose sections are the real task categories.
+    func testQuantWeeksAreTaskListsNotEmptyPages() async throws {
+        try requireContent()
+        let store = makeStore()
+        for week in 1...Track.quant.totalUnits {
+            let lesson = await store.day(.quant, week)
+            let day = try XCTUnwrap(lesson, "quant week \(week) did not load")
+            XCTAssertFalse(day.title.isEmpty, "quant week \(week) has no title")
+            XCTAssertFalse(day.sections.isEmpty, "quant week \(week) has no task categories")
+            let tasks = day.sections.reduce(0) { $0 + $1.text.split(separator: "\n").count }
+            XCTAssertGreaterThan(tasks, 0, "quant week \(week) has no actual tasks")
+        }
+        let firstText = await store.lessonText(.quant, day: 1)
+        XCTAssertTrue(
+            firstText.localizedCaseInsensitiveContains("market"),
+            "week 1 should read like the Financial Foundations week it is"
+        )
+    }
+
     func testLessonTextCarriesRealProse() async throws {
         try requireContent()
         let store = makeStore()

@@ -93,6 +93,9 @@ public actor ContentStore {
 
     private static func readDay(_ track: Track, day: Int, meta: DayMetadata?, root: URL?) -> LessonDay? {
         guard let root else { return nil }
+        // Quant is not a set of day pages; its weeks are a JSON file produced by
+        // tools/stage-content.sh from a JavaScript literal.
+        if track == .quant { return readQuantWeek(day, root: root) }
         let path = "days/" + String(format: "day-%03d.html", day)
         guard let html = try? String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
         else { return nil }
@@ -168,6 +171,59 @@ public actor ContentStore {
             index = out.index(after: index)
         }
         return String(out[index...])
+    }
+
+    /// One quant week.
+    ///
+    /// The checklist's source is a JavaScript object literal with no JavaScript engine available
+    /// on the device, so the staging script evaluates it with node and writes plain JSON. The shape
+    /// here is tasks grouped by category, which is what the prompt wants as a checklist to work
+    /// through rather than as prose to be read aloud.
+    private static func readQuantWeek(_ number: Int, root: URL) -> LessonDay? {
+        let url = root.appendingPathComponent("weeks.json")
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        guard let raw = try? JSONSerialization.jsonObject(with: data),
+              let wrapper = raw as? [String: Any] else { return nil }
+        guard let weeks = wrapper["weeks"] as? [[String: Any]],
+              number >= 1, number <= weeks.count else { return nil }
+        let row = weeks[number - 1]
+
+        let title = row["title"] as? String ?? "Week \(number)"
+        let month = row["month"] as? String ?? ""
+        let period = row["period"] as? String ?? ""
+
+        // Group by category so the tutor can say "three of the five are setup" rather than
+        // reading a flat list of unrelated links.
+        var order: [String] = []
+        var grouped: [String: [String]] = [:]
+        for task in (row["tasks"] as? [[String: Any]] ?? []) {
+            let category = (task["category"] as? String ?? "Tasks").trimmingCharacters(in: .whitespaces)
+            if grouped[category] == nil {
+                grouped[category] = []
+                order.append(category)
+            }
+            var line = (task["text"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+            let steps = (task["steps"] as? [String] ?? []).filter { !$0.isEmpty }
+            if !steps.isEmpty { line += "\n    - " + steps.joined(separator: "\n    - ") }
+            grouped[category]?.append(line)
+        }
+
+        let sections = order.map { category in
+            LessonSection(
+                id: category.lowercased().replacingOccurrences(of: " ", with: "-"),
+                title: category,
+                text: (grouped[category] ?? []).joined(separator: "\n")
+            )
+        }
+
+        return LessonDay(
+            track: .quant,
+            day: number,
+            title: title,
+            phase: month,
+            summary: period.isEmpty ? "" : "\(month) · \(period)",
+            sections: sections
+        )
     }
 
     private static func readTrapLibrary(root: URL?) -> String? {
